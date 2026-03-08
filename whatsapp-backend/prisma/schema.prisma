@@ -11,6 +11,7 @@ model User {
   email            String            @unique
   name             String?
   avatarUrl        String?
+  googleId         String?           @unique
   messages         Message[]
   chatParticipants ChatParticipant[]
   createdAt        DateTime          @default(now())
@@ -36,13 +37,12 @@ model ChatParticipant {
   @@unique([userId, chatId])
 }
 
-model User {
-  id               String            @id @default(uuid())
-  email            String            @unique
-  name             String?
-  avatarUrl        String?
-  googleId         String?           @unique  // 🚀 ADD THIS ONE LINE!
-  messages         Message[]
-  chatParticipants ChatParticipant[]
-  createdAt        DateTime          @default(now())
+model Message {
+  id        String   @id @default(uuid())
+  text      String
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id])
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id])
+  createdAt DateTime @default(now())
 }
