@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  googleId  String   @unique
+  avatarUrl String?
+  createdAt DateTime @default(now())
+
+  // These are the "opposite relation fields" Prisma is asking for
+  messages         Message[]
+  chatParticipants ChatParticipant[]
+}
+
+model ChatParticipant {
+  id     String @id @default(uuid())
+  chatId String
+  userId Int // FIXED: Changed from String to Int to match User.id
+
+  user User @relation(fields: [userId], references: [id])
+  chat Chat @relation(fields: [chatId], references: [id])
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  text      String
+  senderId  Int
+  createdAt DateTime @default(now())
+}
+
+// Ensure your Chat model is also present...
+model Chat {
+  id           String            @id @default(uuid())
+  participants ChatParticipant[]
+  messages     Message[]
+}
