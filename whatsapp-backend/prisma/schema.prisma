@@ -7,37 +7,45 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String?
-  googleId  String   @unique
-  avatarUrl String?
-  createdAt DateTime @default(now())
-
-  // These are the "opposite relation fields" Prisma is asking for
+  id               String            @id @default(uuid())
+  email            String            @unique
+  name             String?
+  avatarUrl        String?
   messages         Message[]
   chatParticipants ChatParticipant[]
+  createdAt        DateTime          @default(now())
+}
+
+model Chat {
+  id           String            @id @default(uuid())
+  isGroup      Boolean           @default(false)
+  name         String?
+  participants ChatParticipant[]
+  messages     Message[]
+  createdAt    DateTime          @default(now())
 }
 
 model ChatParticipant {
-  id     String @id @default(uuid())
-  chatId String
-  userId Int // FIXED: Changed from String to Int to match User.id
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id])
+  joinedAt  DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
-  chat Chat @relation(fields: [chatId], references: [id])
+  @@unique([userId, chatId])
 }
 
 model Message {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(uuid())
   text      String
-  senderId  Int
+  
+  // 🚀 These are the missing "Return Pointers" Render was begging for!
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id])
+  
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id])
+  
   createdAt DateTime @default(now())
-}
-
-// Ensure your Chat model is also present...
-model Chat {
-  id           String            @id @default(uuid())
-  participants ChatParticipant[]
-  messages     Message[]
 }
