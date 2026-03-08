@@ -71,7 +71,7 @@ async function bootstrap() {
     console.log('📡 AWS Connection closed. Please restart server to reconnect.');
   });
 
-  await app.listen(3000);
-  console.log('🚀 Backend is running on: http://localhost:3000');
+await app.listen(process.env.PORT || 3000, '0.0.0.0');
+console.log('🚀 Backend is running on: http://localhost:3000');
 }
 bootstrap();
