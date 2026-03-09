@@ -100,10 +100,10 @@ class _SplashScreensState extends State<SplashScreens> {
                       final String? idToken = googleAuth.idToken;
 
                       if (idToken != null) {
-                        print("DEBUG: Token received. Sending to NestJS at 192.168.1.12...");
+                        print("DEBUG: Token received. Sending to NestJS at https://whatsapp-clone-backend-navv.onrender.com");
                         
                         final response = await http.post(
-                          Uri.parse('http://192.168.1.12:3000/auth/google'),
+                          Uri.parse('https://whatsapp-clone-backend-navv.onrender.com/auth/google'),
                           headers: {'Content-Type': 'application/json'},
                           body: jsonEncode({'idToken': idToken}),
                         ).timeout(const Duration(seconds: 15)); // Timeout if backend is unreachable

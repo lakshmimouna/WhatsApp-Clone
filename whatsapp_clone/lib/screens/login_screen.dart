@@ -13,7 +13,7 @@ class LoginScreen extends StatelessWidget {
   // 🚀 The function that updates your AWS "Phonebook" with the FCM Token
   Future<void> _saveTokenToAWS(String fcmToken, String userName) async {
     // 👉 REMEMBER TO REPLACE THIS WITH YOUR REAL AWS NESTJS URL!
-    final String awsEndpoint = 'http://192.168.1.12:3000/users/save-token';
+    final String awsEndpoint = 'https://whatsapp-clone-backend-navv.onrender.com/users/save-token';
     try {
       final response = await http.post(
         Uri.parse(awsEndpoint),

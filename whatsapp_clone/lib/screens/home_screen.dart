@@ -20,7 +20,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   
   // 🚀 Setting your full name so the database knows who is looking at the screen
-  final String currentUser = "Lakshmi Mouna";
+  String get currentUser {
+    return FirebaseAuth.instance.currentUser?.displayName ?? "Guest User";
+  }
 
   @override
   void initState() {
@@ -30,11 +32,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _fetchData() async {
     try {
-      const String baseUrl = 'http://192.168.1.12:3000/chat/recent';
+      const String baseUrl = 'https://whatsapp-clone-backend-navv.onrender.com/chat/recent';
       
-      // 🚀 Passing your name to the NestJS backend
-      final chatRes = await http.get(Uri.parse('$baseUrl/chat?user=$currentUser'));
-      final groupRes = await http.get(Uri.parse('$baseUrl/group?user=$currentUser'));
+      // 🚀 THE FIX: Safely encode your full name so the URL doesn't crash on the space!
+      String safeUser = Uri.encodeComponent(currentUser);
+
+      final chatRes = await http.get(Uri.parse('$baseUrl/chat?user=$safeUser'));
+      final groupRes = await http.get(Uri.parse('$baseUrl/group?user=$safeUser'));
 
       if (mounted) {
         if (chatRes.statusCode == 200 && groupRes.statusCode == 200) {
@@ -158,7 +162,9 @@ class _HomeScreenState extends State<HomeScreen> {
               // 🚀 THE ERASER TRIGGER: Tell NestJS to clear the circle BEFORE opening the chat!
               if (unreadCount > 0) {
                 try {
-                  final String markReadUrl = 'http://192.168.1.12:3000/chat/mark-read/${item['roomID']}?user=Lakshmi%20Mouna';
+                  String safeUser = Uri.encodeComponent(currentUser);
+                  // 🚀 THE NEW CLOUD ERASER URL!
+                  final String markReadUrl = 'https://whatsapp-clone-backend-navv.onrender.com/chat/mark-read/${item['roomID']}?user=$safeUser';
                   await http.get(Uri.parse(markReadUrl));
                 } catch (e) {
                   print("Could not mark as read: $e");

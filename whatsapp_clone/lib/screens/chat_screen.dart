@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ChatMessage {
   final String text;
@@ -26,7 +27,9 @@ class _ChatScreenState extends State<ChatScreen> {
   
   // 🚀 Variable name is 'messages'
   List<ChatMessage> messages = [];
-  final String myName = "Lakshmi Mouna"; 
+  String get myName {
+    return FirebaseAuth.instance.currentUser?.displayName ?? "Guest User";
+  }
   
   bool _isTyping = false; 
   bool _isLoading = true;

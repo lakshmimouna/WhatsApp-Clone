@@ -72,6 +72,6 @@ async function bootstrap() {
   });
 
 await app.listen(process.env.PORT || 3000, '0.0.0.0');
-console.log('🚀 Backend is running on: http://localhost:3000');
+console.log('🚀 Backend is running on: https://whatsapp-clone-backend-navv.onrender.com');
 }
 bootstrap();
