@@ -12,7 +12,7 @@ export class ChatGateway {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly usersService: UsersService) {} // 🚀 Inject service here
+  constructor(private readonly usersService: UsersService) { } // 🚀 Inject service here
 
   @SubscribeMessage('sendMessage')
   async handleMessage(@MessageBody() payload: any) {
@@ -25,8 +25,8 @@ export class ChatGateway {
     try {
       // For testing, we send a notification to "Lakshmi Mouna" 
       // In a real app, this would be the 'receiver' name
-      const targetUser = "Lakshmi Mouna"; 
-      
+      const targetUser = "Lakshmi Mouna";
+
       const userToken = await this.usersService.getUserToken(targetUser);
 
       if (userToken) {
@@ -40,7 +40,7 @@ export class ChatGateway {
           android: {
             priority: 'high',
             notification: {
-              channelId: 'high_importance_channel', 
+              channelId: 'high_importance_channel',
             },
           },
         });
