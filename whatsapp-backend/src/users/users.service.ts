@@ -25,13 +25,18 @@ export class UsersService {
   }
 
   // 2. Save the FCM Token when a user logs in
-  async saveToken(userId: string, token: string) {
+  async saveToken(email: string, token: string) {
     try {
-      const updatedUser = await this.prisma.user.update({
-        where: { id: userId },
-        data: { fcmToken: token },
+      // 🚀 Changed from 'update' to 'upsert'
+      const updatedUser = await this.prisma.user.upsert({
+        where: { email: email },
+        update: { fcmToken: token }, // If they exist, just update the token
+        create: {                    // If they DO NOT exist, create them!
+          email: email,
+          fcmToken: token,
+        },
       });
-      console.log(`✅ Prisma: Token updated for user ${updatedUser.email}`);
+      console.log(`✅ Prisma: Token saved/updated for user ${updatedUser.email}`);
       return updatedUser;
     } catch (error) {
       console.error(`🚨 Prisma Save Error:`, error);
