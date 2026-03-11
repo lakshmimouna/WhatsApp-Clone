@@ -12,6 +12,7 @@ model User {
   name             String?
   avatarUrl        String?
   googleId         String?           @unique
+  fcmToken         String?
   messages         Message[]
   chatParticipants ChatParticipant[]
   createdAt        DateTime          @default(now())

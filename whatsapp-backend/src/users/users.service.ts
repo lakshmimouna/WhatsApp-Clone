@@ -1,54 +1,55 @@
 import { Injectable } from '@nestjs/common';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
-    private docClient: DynamoDBDocumentClient;
-    private readonly tableName = 'WhatsAppUsers';
+  // This connects to your new Neon PostgreSQL Database
+  private prisma = new PrismaClient();
 
-    constructor() {
-        const client = new DynamoDBClient({
-            region: 'ap-southeast-2',
-            credentials: {
-                // 🚀 Read from the hidden .env file!
-                accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-            }
-        });
-        this.docClient = DynamoDBDocumentClient.from(client);
+  // 1. Fetch all users for the Contact List
+  async getAllUsers() {
+    try {
+      return await this.prisma.user.findMany({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatarUrl: true,
+          fcmToken: true,
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      return [];
     }
+  }
 
-    async saveUserToken(userName: string, fcmToken: string) {
-        const command = new PutCommand({
-            TableName: this.tableName,
-            Item: {
-                userName: userName,
-                fcmToken: fcmToken,
-                updatedAt: Date.now(),
-            },
-        });
-
-        try {
-            await this.docClient.send(command);
-            console.log(`✅ DynamoDB: Token updated for ${userName}`);
-        } catch (error) {
-            console.error(`🚨 DynamoDB Save Error:`, error);
-        }
+  // 2. Save the FCM Token when a user logs in
+  async saveToken(userId: string, token: string) {
+    try {
+      const updatedUser = await this.prisma.user.update({
+        where: { id: userId },
+        data: { fcmToken: token },
+      });
+      console.log(`✅ Prisma: Token updated for user ${updatedUser.email}`);
+      return updatedUser;
+    } catch (error) {
+      console.error(`🚨 Prisma Save Error:`, error);
+      throw error;
     }
+  }
 
-    async getUserToken(userName: string): Promise<string | null> {
-        const command = new GetCommand({
-            TableName: this.tableName,
-            Key: { userName: userName },
-        });
-
-        try {
-            const response = await this.docClient.send(command);
-            return response.Item ? response.Item.fcmToken : null;
-        } catch (error) {
-            console.error(`🚨 DynamoDB Retrieval Error for ${userName}:`, error);
-            return null;
-        }
+  // 3. Get a user's token (We will use this later to send notifications!)
+  async getUserToken(userId: string): Promise<string | null> {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { fcmToken: true },
+      });
+      return user?.fcmToken || null;
+    } catch (error) {
+      console.error(`🚨 Prisma Retrieval Error:`, error);
+      return null;
     }
+  }
 }
