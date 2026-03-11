@@ -1,36 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // 🚀 Added for Notifications
-import 'package:http/http.dart' as http; // 🚀 Added to talk to AWS
-import 'dart:convert'; // 🚀 Added to package data into JSON
+import 'package:firebase_messaging/firebase_messaging.dart'; 
+import 'package:http/http.dart' as http; 
+import 'dart:convert'; 
 
 import 'home_screen.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
-  // 🚀 The function that updates your AWS "Phonebook" with the FCM Token
-  Future<void> _saveTokenToAWS(String fcmToken, String userName) async {
-    // 👉 REMEMBER TO REPLACE THIS WITH YOUR REAL AWS NESTJS URL!
-    final String awsEndpoint = 'https://whatsapp-clone-backend-navv.onrender.com/users/save-token';
+  // 🚀 Updated function to talk to your new Render/Neon Backend
+  Future<void> _saveTokenToDatabase(String fcmToken, String email) async {
+    final String backendEndpoint = 'https://whatsapp-clone-backend-navv.onrender.com/users/save-token';
     try {
       final response = await http.post(
-        Uri.parse(awsEndpoint),
+        Uri.parse(backendEndpoint),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
-          "userName": userName, 
+          "email": email, // 👈 We now send the unique email, not the name!
           "fcmToken": fcmToken,
         }),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        print("✅ SUCCESS: Saved $userName's token to AWS!");
+        print("✅ SUCCESS: Saved token to Neon Database for $email!");
       } else {
-        print("🚨 AWS ERROR: Could not save token. Status: ${response.statusCode}");
+        print("🚨 SERVER ERROR: Could not save token. Status: ${response.statusCode}");
       }
     } catch (e) {
-      print("🚨 NETWORK ERROR: Failed to send token to AWS: $e");
+      print("🚨 NETWORK ERROR: Failed to send token: $e");
     }
   }
 
@@ -55,17 +54,17 @@ class LoginScreen extends StatelessWidget {
       // Log the user into Firebase
       await FirebaseAuth.instance.signInWithCredential(credential);
       
-      // 🚀 --- NEW NOTIFICATION TOKEN LOGIC --- 🚀
-      // 1. Get the user's actual Google name (e.g., "Lakshmi Mouna")
-      final String userName = googleUser.displayName ?? "Unknown User";
+      // 🚀 --- NOTIFICATION TOKEN LOGIC --- 🚀
+      // 1. Get the user's unique Google email
+      final String userEmail = googleUser.email; 
       
       // 2. Ask Firebase for this device's unique Notification Token
       String? token = await FirebaseMessaging.instance.getToken();
       print('📱 FCM DEVICE TOKEN: $token');
 
-      // 3. Send the name and token up to AWS!
+      // 3. Send the email and token up to your NestJS Backend!
       if (token != null) {
-        await _saveTokenToAWS(token, userName); 
+        await _saveTokenToDatabase(token, userEmail); 
       }
       // 🚀 -------------------------------------- 🚀
 

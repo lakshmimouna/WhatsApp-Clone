@@ -19,9 +19,9 @@ class _HomeScreenState extends State<HomeScreen> {
   List<dynamic> _recentGroups = []; 
   bool _isLoading = true;
   
-  // 🚀 Setting your full name so the database knows who is looking at the screen
+  // 🚀 Setting your EMAIL so the database knows exactly who is looking at the screen
   String get currentUser {
-    return FirebaseAuth.instance.currentUser?.displayName ?? "Guest User";
+    return FirebaseAuth.instance.currentUser?.email ?? "Guest User";
   }
 
   @override
@@ -56,6 +56,77 @@ class _HomeScreenState extends State<HomeScreen> {
       print("🚨 Network Error: $e");
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  // 🚀 Fetch all registered users from your Neon database!
+  Future<void> _showContactsList() async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return FutureBuilder(
+          future: http.get(Uri.parse('https://whatsapp-clone-backend-navv.onrender.com/users')),
+          builder: (context, AsyncSnapshot<http.Response> snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator(color: Color(0xFF128C7E)));
+            }
+            if (snapshot.hasError || snapshot.data?.statusCode != 200) {
+              return const Center(child: Text("Could not load contacts."));
+            }
+
+            List<dynamic> users = jsonDecode(snapshot.data!.body);
+            
+            // 🚀 Filter out your own email so you don't chat with yourself!
+            final myEmail = FirebaseAuth.instance.currentUser?.email;
+            users = users.where((u) => u['email'] != myEmail).toList();
+
+            if (users.isEmpty) {
+              return const Center(child: Text("No friends have registered yet!", style: TextStyle(color: Colors.grey)));
+            }
+
+            return Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text("Select Contact", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: users.length,
+                    itemBuilder: (context, index) {
+                      final user = users[index];
+                      // Use their Google name if they have one, otherwise use their email
+                      final displayName = user['name'] ?? user['email'];
+                      
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: const Color(0xFF128C7E),
+                          backgroundImage: user['avatarUrl'] != null ? NetworkImage(user['avatarUrl']) : null,
+                          child: user['avatarUrl'] == null ? const Icon(Icons.person, color: Colors.white) : null,
+                        ),
+                        title: Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text(user['email']),
+                        onTap: () {
+                          // 1. Close the bottom sheet
+                          Navigator.pop(context);
+                          // 2. Open the Chat Screen with this exact user!
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => ChatScreen(contactName: user['email'])),
+                          ).then((_) => _fetchData()); // Refresh home screen when you come back
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          }
+        );
+      }
+    );
   }
 
   @override
@@ -98,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         floatingActionButton: FloatingActionButton(
-          onPressed: () {},
+          onPressed: _showContactsList, // 🚀 Now it opens the cloud contact list!
           backgroundColor: const Color(0xFF25D366),
           child: const Icon(Icons.chat, color: Colors.white),
         ),
