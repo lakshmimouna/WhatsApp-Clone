@@ -1,6 +1,6 @@
-import { WebSocketGateway, SubscribeMessage, MessageBody, WebSocketServer } from '@nestjs/websockets';
+import { WebSocketGateway, SubscribeMessage, MessageBody, WebSocketServer, OnGatewayDisconnect, ConnectedSocket } from '@nestjs/websockets';
 import { OnModuleInit } from '@nestjs/common'; // 🚀 This is the correct import!
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { UsersService } from '../users/users.service';
 import { ChatService } from './chat.service';
 import * as admin from 'firebase-admin';
@@ -8,9 +8,12 @@ import * as admin from 'firebase-admin';
 @WebSocketGateway({
   cors: { origin: '*' },
 })
-export class ChatGateway implements OnModuleInit {
+export class ChatGateway implements OnModuleInit, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
+
+  // 🚀 Track who is online (Socket ID -> Email)
+  private activeUsers = new Map<string, string>(); 
 
   constructor(
     private readonly usersService: UsersService,
@@ -20,6 +23,25 @@ export class ChatGateway implements OnModuleInit {
   // 🚀 The Heartbeat!
   onModuleInit() {
     console.log('✅ WEBSOCKET GATEWAY IS ALIVE AND LISTENING!');
+  }
+
+  // 🚀 1. When a user opens the app, they tell the server they are online
+  @SubscribeMessage('goOnline')
+  handleGoOnline(@MessageBody() email: string, @ConnectedSocket() client: Socket) {
+    this.activeUsers.set(client.id, email);
+    // Broadcast to everyone that this user is online
+    this.server.emit('userStatusChanged', { email: email, status: 'Online' });
+  }
+
+  // 🚀 2. When they close the app, Socket.io automatically fires this
+  handleDisconnect(client: Socket) {
+    const email = this.activeUsers.get(client.id);
+    if (email) {
+      this.activeUsers.delete(client.id);
+      // Tell everyone they left, with a timestamp
+      const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      this.server.emit('userStatusChanged', { email: email, status: `last seen today at ${timeString}` });
+    }
   }
 
   @SubscribeMessage('sendMessage')
