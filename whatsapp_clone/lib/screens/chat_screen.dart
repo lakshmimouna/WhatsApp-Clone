@@ -34,6 +34,7 @@ class _ChatScreenState extends State<ChatScreen> {
   
   bool _isTyping = false; 
   bool _isLoading = true;
+  bool _isPeerTyping = false; // To track if the other person is typing
 
   @override
   void initState() {
@@ -45,6 +46,12 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         setState(() {
           _isTyping = _messageController.text.isNotEmpty;
+        });
+        // 🚀 Emit typing status to the server
+        socket.emit('typing', {
+          "roomID": widget.contactName,
+          "sender": myEmail,
+          "isTyping": _messageController.text.isNotEmpty,
         });
       }
     });
@@ -107,6 +114,17 @@ class _ChatScreenState extends State<ChatScreen> {
       print('⚠️ SOCKET DISCONNECTED');
     });
 
+    socket.on('displayTyping', (data) {
+      if (mounted) {
+        // If the person I am currently chatting with is typing to ME
+        if (data['sender'] == widget.contactName && data['roomID'] == myEmail) {
+          setState(() {
+            _isPeerTyping = data['isTyping'];
+          });
+        }
+      }
+    });
+
     socket.on('receiveMessage', (data) {
       if (!mounted) return;
       if ((data['sender'] == myEmail && data['roomID'] == widget.contactName) ||
@@ -155,7 +173,14 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF128C7E),
         foregroundColor: Colors.white,
-        title: Text(widget.contactName.split('@')[0]), // Shows name instead of full email
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.contactName.split('@')[0]),
+            if (_isPeerTyping)
+              const Text("typing...", style: TextStyle(fontSize: 12, color: Colors.white70)),
+          ],
+        ),
       ),
       body: Column(
         children: [
