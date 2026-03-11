@@ -120,6 +120,7 @@ export class ChatService {
         text: msg.text,
         sender: msg.sender.email,
         timestamp: msg.createdAt.getTime(),
+        isRead: msg.isRead, // 🚀 Now Flutter will know if it's read!
       }));
     } catch (error) {
       console.error('🚨 Error fetching history:', error);
@@ -127,8 +128,32 @@ export class ChatService {
     }
   }
 
-  // 🚀 4. Mark Room as Read
+  // 🚀 Marks all unread messages from the other person as READ
   async markRoomAsRead(roomID: string, currentUserEmail: string) {
-    return { success: true };
+    const currentUser = await this.prisma.user.findUnique({ where: { email: currentUserEmail } });
+    const otherUser = await this.prisma.user.findUnique({ where: { email: roomID } });
+
+    if (!currentUser || !otherUser) return;
+
+    const chat = await this.prisma.chat.findFirst({
+      where: {
+        isGroup: false,
+        AND: [
+          { participants: { some: { userId: currentUser.id } } },
+          { participants: { some: { userId: otherUser.id } } }
+        ]
+      }
+    });
+
+    if (!chat) return;
+
+    await this.prisma.message.updateMany({
+      where: {
+        chatId: chat.id,
+        senderId: otherUser.id, // Only mark messages sent BY the other person
+        isRead: false
+      },
+      data: { isRead: true }
+    });
   }
 }

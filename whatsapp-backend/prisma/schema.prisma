@@ -46,5 +46,6 @@ model Message {
   sender    User     @relation(fields: [senderId], references: [id])
   chatId    String
   chat      Chat     @relation(fields: [chatId], references: [id])
+  isRead    Boolean  @default(false) // 🚀 ADD THIS EXACT LINE
   createdAt DateTime @default(now())
 }

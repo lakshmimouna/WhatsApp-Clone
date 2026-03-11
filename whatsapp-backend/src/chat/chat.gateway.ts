@@ -61,4 +61,13 @@ export class ChatGateway implements OnModuleInit {
     // Broadcast the typing status to the other person in the room
     this.server.emit('displayTyping', payload);
   }
+
+  @SubscribeMessage('markAsRead')
+  async handleMarkAsRead(@MessageBody() payload: { reader: string; roomID: string }) {
+    // 1. Update the database
+    await this.chatService.markRoomAsRead(payload.roomID, payload.reader);
+    
+    // 2. Tell the sender's phone to turn their gray ticks BLUE!
+    this.server.emit('messagesRead', { reader: payload.reader, roomID: payload.roomID });
+  }
 }
