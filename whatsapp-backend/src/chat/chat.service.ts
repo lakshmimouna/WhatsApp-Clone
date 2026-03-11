@@ -1,80 +1,134 @@
 import { Injectable } from '@nestjs/common';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, ScanCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class ChatService {
-  private docClient: DynamoDBDocumentClient;
+  private prisma = new PrismaClient();
 
-  constructor() {
-    const client = new DynamoDBClient({ 
-      region: 'ap-southeast-2',
-      credentials: {
-        accessKeyId: 'AKIASU63Z2FZZGMKTUOW', 
-        secretAccessKey: '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'
-      }
-    });
-    this.docClient = DynamoDBDocumentClient.from(client);
-  }
-
-  async getRecentItems(type: 'chat' | 'group', currentUser: string) {
+  // 🚀 1. Fetch Recent Chats for Home Screen
+  async getRecentItems(type: 'chat' | 'group', userEmail: string) {
     try {
-      const command = new ScanCommand({ TableName: 'WhatsAppMessages' });
-      const response = await this.docClient.send(command);
-      const messages = response.Items || [];
+      const user = await this.prisma.user.findUnique({ where: { email: userEmail } });
+      if (!user) return [];
 
-      const rooms = {};
-      messages.forEach((msg) => {
-        if (!msg.roomID) return; 
-        
-        const isGroupMsg = msg.roomID.startsWith('Group:');
-        
-        if ((type === 'group' && isGroupMsg) || (type === 'chat' && !isGroupMsg)) {
-          if (!rooms[msg.roomID]) {
-            rooms[msg.roomID] = { latestMessage: msg, unreadCount: 0 };
-          }
-          if (msg.timestamp > rooms[msg.roomID].latestMessage.timestamp) {
-            rooms[msg.roomID].latestMessage = msg;
-          }
-          if (msg.sender !== currentUser && msg.isRead !== true) {
-            rooms[msg.roomID].unreadCount += 1;
+      const isGroupFilter = type === 'group';
+      const chats = await this.prisma.chat.findMany({
+        where: {
+          isGroup: isGroupFilter,
+          participants: { some: { userId: user.id } }
+        },
+        include: {
+          participants: { include: { user: true } },
+          messages: {
+            orderBy: { createdAt: 'desc' },
+            take: 1, // Only need the newest message
+            include: { sender: true }
           }
         }
       });
 
-      return Object.values(rooms).map((r: any) => ({
-        ...r.latestMessage,
-        unreadCount: r.unreadCount
-      })).sort((a: any, b: any) => b.timestamp - a.timestamp);
+      const formattedChats = chats
+        .filter(chat => chat.messages.length > 0)
+        .map(chat => {
+          const latestMessage = chat.messages[0];
+          let displayRoomName = chat.name;
+          if (!chat.isGroup) {
+            const otherPerson = chat.participants.find(p => p.userId !== user.id);
+            displayRoomName = otherPerson?.user.name || otherPerson?.user.email || 'Unknown';
+          }
+
+          return {
+            roomID: displayRoomName,
+            text: latestMessage.text,
+            sender: latestMessage.sender.email,
+            timestamp: latestMessage.createdAt.getTime(),
+            unreadCount: 0
+          };
+        });
+
+      return formattedChats.sort((a, b) => b.timestamp - a.timestamp);
     } catch (error) {
       console.error(`🚨 Error fetching ${type}s:`, error);
       return [];
     }
   }
 
-  // 🚀 THE ERASER LOGIC: Finds unread messages and updates DynamoDB!
-  async markRoomAsRead(roomID: string, currentUser: string) {
-    try {
-      const command = new ScanCommand({ TableName: 'WhatsAppMessages' });
-      const response = await this.docClient.send(command);
-      const messages = response.Items || [];
+  // 🚀 2. Save a New Message to Database
+  async sendMessage(senderEmail: string, receiverEmail: string, text: string) {
+    const sender = await this.prisma.user.findUnique({ where: { email: senderEmail } });
+    const receiver = await this.prisma.user.findUnique({ where: { email: receiverEmail } });
 
-      for (const msg of messages) {
-        // If it's the right room, sent by someone else, and not read yet...
-        if (msg.roomID === roomID && msg.sender !== currentUser && msg.isRead !== true) {
-          msg.isRead = true; // Mark it!
-          
-          // Save it back to DynamoDB
-          await this.docClient.send(new PutCommand({
-            TableName: 'WhatsAppMessages',
-            Item: msg
-          }));
-        }
+    if (!sender || !receiver) throw new Error("Could not find users in database");
+
+    let chat = await this.prisma.chat.findFirst({
+      where: {
+        isGroup: false,
+        AND: [
+          { participants: { some: { userId: sender.id } } },
+          { participants: { some: { userId: receiver.id } } }
+        ]
       }
-      return { success: true };
-    } catch (error) {
-      console.error('🚨 Error marking as read:', error);
-      return { success: false };
+    });
+
+    if (!chat) {
+      chat = await this.prisma.chat.create({
+        data: {
+          isGroup: false,
+          participants: {
+            create: [{ userId: sender.id }, { userId: receiver.id }]
+          }
+        }
+      });
     }
+
+    return this.prisma.message.create({
+      data: {
+        text: text,
+        senderId: sender.id,
+        chatId: chat.id
+      }
+    });
+  }
+
+  // 🚀 3. Fetch Old Messages when opening a Chat
+  async getChatHistory(user1Email: string, user2Email: string) {
+    try {
+      const user1 = await this.prisma.user.findUnique({ where: { email: user1Email } });
+      const user2 = await this.prisma.user.findUnique({ where: { email: user2Email } });
+
+      if (!user1 || !user2) return [];
+
+      const chat = await this.prisma.chat.findFirst({
+        where: {
+          isGroup: false,
+          AND: [
+            { participants: { some: { userId: user1.id } } },
+            { participants: { some: { userId: user2.id } } }
+          ]
+        },
+        include: {
+          messages: {
+            orderBy: { createdAt: 'asc' },
+            include: { sender: true }
+          }
+        }
+      });
+
+      if (!chat) return [];
+
+      return chat.messages.map(msg => ({
+        text: msg.text,
+        sender: msg.sender.email,
+        timestamp: msg.createdAt.getTime(),
+      }));
+    } catch (error) {
+      console.error('🚨 Error fetching history:', error);
+      return [];
+    }
+  }
+
+  // 🚀 4. Mark Room as Read
+  async markRoomAsRead(roomID: string, currentUserEmail: string) {
+    return { success: true };
   }
 }

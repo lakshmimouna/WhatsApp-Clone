@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ChatGateway } from './chat.gateway';
-import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
-import { UsersModule } from '../users/users.module'; // 🚀 Import the module
+import { ChatController } from './chat.controller';
+import { UsersService } from '../users/users.service'; // Make sure this is imported
 
 @Module({
-  imports: [UsersModule], // 🚀 Add it here so ChatGateway can use UsersService
   controllers: [ChatController],
-  providers: [ChatGateway, ChatService],
+  // 🚀 If ChatGateway isn't in this providers array, WebSockets won't turn on!
+  providers: [ChatGateway, ChatService, UsersService], 
 })
 export class ChatModule {}

@@ -10,9 +10,9 @@ export class ChatController {
     return this.chatService.getRecentItems(type, user);
   }
 
-  // 🚀 THE ERASER DOOR: Flutter will hit this URL to clear the green circle
-  @Get('mark-read/:roomID')
-  async markRead(@Param('roomID') roomID: string, @Query('user') user: string) {
-    return this.chatService.markRoomAsRead(roomID, user);
+  // 🚀 ADD THIS NEW ROUTE
+  @Get('history')
+  async getHistory(@Query('user1') user1: string, @Query('user2') user2: string) {
+    return this.chatService.getChatHistory(user1, user2);
   }
 }
