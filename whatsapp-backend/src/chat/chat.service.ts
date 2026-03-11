@@ -5,7 +5,7 @@ import { PrismaClient } from '@prisma/client';
 export class ChatService {
   private prisma = new PrismaClient();
 
-  // 🚀 1. Fetch Recent Chats for Home Screen
+  // 🚀 1. Fetch Recent Chats & Count Unread Messages
   async getRecentItems(type: 'chat' | 'group', userEmail: string) {
     try {
       const user = await this.prisma.user.findUnique({ where: { email: userEmail } });
@@ -19,9 +19,20 @@ export class ChatService {
         },
         include: {
           participants: { include: { user: true } },
+          // 🚀 Tell Prisma to specifically count unread messages sent by the OTHER person
+          _count: {
+            select: {
+              messages: {
+                where: {
+                  senderId: { not: user.id },
+                  isRead: false
+                }
+              }
+            }
+          },
           messages: {
             orderBy: { createdAt: 'desc' },
-            take: 1, // Only need the newest message
+            take: 1, // Still only grab the text of the latest message for the UI
             include: { sender: true }
           }
         }
@@ -42,7 +53,7 @@ export class ChatService {
             text: latestMessage.text,
             sender: latestMessage.sender.email,
             timestamp: latestMessage.createdAt.getTime(),
-            unreadCount: 0
+            unreadCount: chat._count.messages // 🚀 Pass the actual count to Flutter!
           };
         });
 
