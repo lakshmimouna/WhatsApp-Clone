@@ -55,4 +55,10 @@ export class ChatGateway implements OnModuleInit {
       console.error('🚨 Firebase Notification Error:', error);
     }
   }
+
+  @SubscribeMessage('typing')
+  handleTyping(@MessageBody() payload: { sender: string; roomID: string; isTyping: boolean }) {
+    // Broadcast the typing status to the other person in the room
+    this.server.emit('displayTyping', payload);
+  }
 }
