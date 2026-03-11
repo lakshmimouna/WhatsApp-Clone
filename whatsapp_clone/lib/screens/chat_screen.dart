@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'dart:convert';
-import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class ChatMessage {
   final String text;
@@ -14,7 +15,7 @@ class ChatMessage {
 }
 
 class ChatScreen extends StatefulWidget {
-  final String contactName;
+  final String contactName; // This is the OTHER person's email
   const ChatScreen({super.key, required this.contactName});
 
   @override
@@ -22,13 +23,13 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  late WebSocketChannel channel;
+  late IO.Socket socket;
   final TextEditingController _messageController = TextEditingController();
   
-  // 🚀 Variable name is 'messages'
   List<ChatMessage> messages = [];
-  String get myName {
-    return FirebaseAuth.instance.currentUser?.displayName ?? "Guest User";
+  
+  String get myEmail {
+    return FirebaseAuth.instance.currentUser?.email ?? "Guest User";
   }
   
   bool _isTyping = false; 
@@ -37,7 +38,8 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _connectToAWS();
+    _fetchHistory(); // 🚀 Fetch old messages first!
+    _connectToRender(); // Then connect to live sockets
 
     _messageController.addListener(() {
       if (mounted) {
@@ -48,87 +50,100 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  void _connectToAWS() async {
-    final awsUrl = 'wss://rnb90nsph3.execute-api.ap-southeast-2.amazonaws.com/v2'; 
-    channel = WebSocketChannel.connect(Uri.parse(awsUrl));
+  // 🚀 GRAB OLD MESSAGES FROM NEON DATABASE
+  Future<void> _fetchHistory() async {
+    try {
+      final safeMe = Uri.encodeComponent(myEmail);
+      final safeThem = Uri.encodeComponent(widget.contactName);
+      final url = Uri.parse('https://whatsapp-clone-backend-navv.onrender.com/chat/history?user1=$safeMe&user2=$safeThem');
+      
+      final response = await http.get(url);
+      
+      if (response.statusCode == 200) {
+        final List<dynamic> historyData = jsonDecode(response.body);
+        
+        if (mounted) {
+          setState(() {
+            messages = historyData.map((msg) {
+              DateTime date = DateTime.fromMillisecondsSinceEpoch(msg['timestamp'] as int);
+              String timeString = DateFormat('h:mm a').format(date);
+              
+              return ChatMessage(
+                text: msg['text'],
+                sender: msg['sender'],
+                isMe: msg['sender'] == myEmail,
+                time: timeString,
+              );
+            }).toList();
+            
+            _isLoading = false; // Stop the spinner!
+          });
+        }
+      }
+    } catch (e) {
+      print('🚨 Error fetching history: $e');
+      if (mounted) setState(() => _isLoading = false); // Stop spinner even if error
+    }
+  }
 
-    await Future.delayed(const Duration(seconds: 2)); 
-
-    if (!mounted) return;
-
-    channel.sink.add(jsonEncode({
-      "action": "getMessages",
-      "room": widget.contactName
-    }));
-
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted && _isLoading) setState(() => _isLoading = false);
+  void _connectToRender() {
+    // 🚀 Clean, standard connection. No forced paths or extra headers.
+    socket = IO.io('https://whatsapp-clone-backend-navv.onrender.com', <String, dynamic>{
+      'transports': ['websocket'],
+      'autoConnect': false,
     });
 
-    channel.stream.listen((message) {
-      if (!mounted) return;
-      try {
-        final data = jsonDecode(message);
-        setState(() {
-          if (data['type'] == 'history') {
-            messages.clear();
-            for (var msg in data['messages']) {
-              String timeString = DateFormat('h:mm a').format(DateTime.now());
-              if (msg['timestamp'] != null) {
-                DateTime date = DateTime.fromMillisecondsSinceEpoch(msg['timestamp'] as int);
-                timeString = DateFormat('h:mm a').format(date);
-              }
-              
-              messages.add(ChatMessage(
-                text: msg['text'] ?? '',
-                sender: msg['sender'] ?? '',
-                isMe: msg['sender'] == myName || msg['sender'] == 'Lakshmi', 
-                time: timeString,
-              ));
-            }
-            _isLoading = false;
-          } 
-          else if (data['type'] == 'live') {
-            if (data['room'] == widget.contactName) {
-              String timeString = DateFormat('h:mm a').format(DateTime.now());
-              if (data['timestamp'] != null) {
-                DateTime date = DateTime.fromMillisecondsSinceEpoch(data['timestamp'] as int);
-                timeString = DateFormat('h:mm a').format(date);
-              }
-              
-              messages.add(ChatMessage(
-                text: data['text'],
-                sender: data['sender'],
-                isMe: data['sender'] == myName || data['sender'] == 'Lakshmi', 
-                time: timeString,
-              ));
-            }
-          }
-        });
-      } catch (e) {
-        print("🚨 JSON ERROR: $e");
-      }
-    }, onDone: () {
+    socket.onConnect((_) {
+      print('✅ CONNECTED TO RENDER SOCKET!');
       if (mounted) setState(() => _isLoading = false);
     });
+
+    socket.onConnectError((error) {
+      print('🚨 SOCKET ERROR: $error');
+      if (mounted) setState(() => _isLoading = false);
+    });
+
+    socket.onDisconnect((_) {
+      print('⚠️ SOCKET DISCONNECTED');
+    });
+
+    socket.on('receiveMessage', (data) {
+      if (!mounted) return;
+      if ((data['sender'] == myEmail && data['roomID'] == widget.contactName) ||
+          (data['sender'] == widget.contactName && data['roomID'] == myEmail)) {
+        
+        String timeString = DateFormat('h:mm a').format(DateTime.now());
+        setState(() {
+          messages.add(ChatMessage(
+            text: data['text'],
+            sender: data['sender'],
+            isMe: data['sender'] == myEmail, 
+            time: timeString,
+          ));
+        });
+      }
+    });
+
+    socket.connect();
   }
 
   void _sendMessage() {
     String text = _messageController.text.trim();
     if (text.isNotEmpty) {
-      channel.sink.add(jsonEncode({
-        "action": "sendMessage", 
-        "room": widget.contactName,
+      // 🚀 3. SEND THE MESSAGE TO NESTJS (Which saves it to Neon & fires FCM!)
+      socket.emit('sendMessage', {
+        "roomID": widget.contactName, 
         "text": text,
-        "sender": myName,
-      }));
+        "sender": myEmail,
+      });
       _messageController.clear();
     }
   }
 
   @override
   void dispose() {
-    channel.sink.close();
+    socket.disconnect();
+    socket.dispose();
     _messageController.dispose();
     super.dispose();
   }
@@ -140,7 +155,7 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF128C7E),
         foregroundColor: Colors.white,
-        title: Text(widget.contactName),
+        title: Text(widget.contactName.split('@')[0]), // Shows name instead of full email
       ),
       body: Column(
         children: [
@@ -148,11 +163,10 @@ class _ChatScreenState extends State<ChatScreen> {
             child: _isLoading 
               ? const Center(child: CircularProgressIndicator(color: Color(0xFF128C7E)))
               : ListView.builder(
-                  reverse: true, // 🚀 Starts the view at the bottom
+                  reverse: true, 
                   padding: const EdgeInsets.all(10),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
-                    // 🚀 Since the list is reversed, we pick items from the end of the array
                     final message = messages[messages.length - 1 - index]; 
                     return _buildMessageBubble(message.text, message.time, message.isMe);
                   },
