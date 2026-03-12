@@ -42,13 +42,18 @@ export class ChatService {
         .filter(chat => chat.messages.length > 0)
         .map(chat => {
           const latestMessage = chat.messages[0];
-          let displayRoomName = chat.name;
-          let contactName = null;
+          let displayRoomName: string = chat.name || '';
+          
+          // 🚀 FIX: Tell TypeScript this can be a string OR null
+          let contactName: string | null = null; 
 
           if (!chat.isGroup) {
             const otherPerson = chat.participants.find(p => p.userId !== user.id);
-            displayRoomName = otherPerson?.user.name || otherPerson?.user.email || 'Unknown';
-            contactName = otherPerson?.user.name;
+            
+            // 🚀 Use the 'name' field from your Prisma schema
+            contactName = otherPerson?.user.name || null;
+            
+            displayRoomName = contactName || otherPerson?.user.email || 'Unknown';
           }
 
           return {
@@ -59,7 +64,7 @@ export class ChatService {
             sender: latestMessage.sender.email,
             senderName: latestMessage.sender.name,
             timestamp: latestMessage.createdAt.getTime(),
-            unreadCount: chat._count.messages // 🚀 Pass the actual count to Flutter!
+            unreadCount: chat._count.messages 
           };
         });
 
