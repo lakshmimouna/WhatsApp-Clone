@@ -4,6 +4,7 @@ import { Server, Socket } from 'socket.io';
 import { UsersService } from '../users/users.service';
 import { ChatService } from './chat.service';
 import * as admin from 'firebase-admin';
+import { PrismaClient } from '@prisma/client';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -60,10 +61,16 @@ export class ChatGateway implements OnModuleInit, OnGatewayDisconnect {
       const userToken = await this.usersService.getUserToken(targetEmail);
 
       if (userToken) {
+        // 🚀 1. Look up the real name of the person who sent it!
+        const prisma = new PrismaClient();
+        const senderProfile = await prisma.user.findUnique({ where: { email: payload.sender } });
+        const displayTitle = senderProfile?.name || payload.sender; // Fallback to email if no name exists
+
+        // 🚀 2. Send the real name to Firebase
         await admin.messaging().send({
           token: userToken,
           notification: {
-            title: `New message from ${payload.sender}`,
+            title: `New message from ${displayTitle}`, // ✨ The real name!
             body: payload.text,
           },
           android: {
