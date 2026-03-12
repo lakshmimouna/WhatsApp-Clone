@@ -1,26 +1,31 @@
-import { Controller, Post, Body, Get } from '@nestjs/common';
-import { UsersService } from '../users/users.service'; // 🚀 FIXED: Removed the .ts extension
+import { Controller, Get, Query, Post, Body } from '@nestjs/common';
+import { ChatService } from './chat.service';
 
-@Controller('users')
-export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+@Controller('chat')
+export class ChatController {
+  constructor(private readonly chatService: ChatService) {}
 
-  // 🚀 Fetch contacts/users for your Home Screen
-  @Get()
-  async getAllUsers() {
-    return this.usersService.getAllUsers();
+  // 🚀 1. Fetch recent chats for your Home Screen
+  @Get('recent')
+  async getRecent(
+    @Query('type') type: 'chat' | 'group', 
+    @Query('email') email: string
+  ) {
+    return this.chatService.getRecentItems(type, email);
   }
 
-  // 🚀 Catch the FCM token from Flutter for push notifications
-  @Post('save-token')
-  async saveToken(@Body() body: { email: string; fcmToken: string }) {
-    // We pass the exact email and token from the body to your service
-    return this.usersService.saveToken(body.email, body.fcmToken);
+  // 🚀 2. Fetch the old message history when opening a chat
+  @Get('history')
+  async getHistory(
+    @Query('user1') user1Email: string, 
+    @Query('user2') user2Email: string
+  ) {
+    return this.chatService.getChatHistory(user1Email, user2Email);
   }
 
-  // 🚀 Save the actual username from the Flutter pop-up
-  @Post('update-name')
-  async updateUsername(@Body() body: { email: string; username: string }) {
-    return this.usersService.updateName(body.email, body.username);
+  // 🚀 3. Mark messages as read when the user opens the chat
+  @Post('read')
+  async markAsRead(@Body() body: { roomID: string; email: string }) {
+    return this.chatService.markRoomAsRead(body.roomID, body.email);
   }
 }
