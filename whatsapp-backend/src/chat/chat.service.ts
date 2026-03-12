@@ -61,6 +61,8 @@ export class ChatService {
         });
       }
 
+      formattedList.sort((a, b) => b.timestamp - a.timestamp);
+
       return formattedList;
 
     } catch (error) {

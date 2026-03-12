@@ -68,4 +68,17 @@ export class UsersService {
 
     return { success: true, user: updatedUser };
   }
+
+  // 🚀 Erase the token on logout so they stop getting notifications
+  async clearToken(email: string) {
+    try {
+      return await this.prisma.user.update({
+        where: { email: email },
+        data: { fcmToken: null }, // Wipe it out!
+      });
+    } catch (error) {
+      console.error('Error clearing token:', error);
+      return null;
+    }
+  }
 }

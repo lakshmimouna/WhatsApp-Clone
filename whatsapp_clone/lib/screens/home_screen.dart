@@ -224,9 +224,27 @@ class _HomeScreenState extends State<HomeScreen> {
             IconButton(
               icon: const Icon(Icons.logout),
               onPressed: () async {
+                final user = FirebaseAuth.instance.currentUser;
+                
+                if (user != null && user.email != null) {
+                  // 🚀 1. Tell the NestJS backend to delete this phone's token!
+                  try {
+                    await http.post(
+                      Uri.parse('https://whatsapp-clone-backend-navv.onrender.com/users/clear-token'),
+                      headers: {'Content-Type': 'application/json'},
+                      body: jsonEncode({"email": user.email}),
+                    );
+                  } catch (e) {
+                    print("Failed to clear token: $e");
+                  }
+                }
+
+                // 🚀 2. Now it is safe to actually sign out
                 try { await GoogleSignIn().disconnect(); } catch (e) {}
                 await GoogleSignIn().signOut();
                 await FirebaseAuth.instance.signOut();
+                
+                // 3. Send them back to the Login Screen
                 if (context.mounted) {
                   Navigator.of(context).pushAndRemoveUntil(
                     MaterialPageRoute(builder: (context) => const OnboardingScreen()),

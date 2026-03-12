@@ -22,4 +22,10 @@ export class UsersController {
   async updateUsername(@Body() body: { email: string; username: string }) {
     return this.usersService.updateName(body.email, body.username);
   }
+
+  // 🚀 The route Flutter will call right before signing out
+  @Post('clear-token')
+  async clearToken(@Body() body: { email: string }) {
+    return this.usersService.clearToken(body.email);
+  }
 }
