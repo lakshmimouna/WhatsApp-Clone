@@ -5,72 +5,66 @@ import { PrismaClient } from '@prisma/client';
 export class ChatService {
   private prisma = new PrismaClient();
 
-  // 🚀 1. Fetch Recent Chats & Count Unread Messages
+  // 🚀 1. Fetch All Users & Recent Chats
   async getRecentItems(type: 'chat' | 'group', userEmail: string) {
     try {
-      const user = await this.prisma.user.findUnique({ where: { email: userEmail } });
-      if (!user) return [];
+      const currentUser = await this.prisma.user.findUnique({ where: { email: userEmail } });
+      if (!currentUser) return [];
 
-      const isGroupFilter = type === 'group';
-      const chats = await this.prisma.chat.findMany({
-        where: {
-          isGroup: isGroupFilter,
-          participants: { some: { userId: user.id } }
-        },
-        include: {
-          participants: { include: { user: true } },
-          // 🚀 Tell Prisma to specifically count unread messages sent by the OTHER person
-          _count: {
-            select: {
-              messages: {
-                where: {
-                  senderId: { not: user.id },
-                  isRead: false
+      // 🚀 Fetch ALL users except yourself, newest first!
+      const allUsers = await this.prisma.user.findMany({
+        where: { id: { not: currentUser.id } },
+        orderBy: { createdAt: 'desc' }, // Latest added users at the top
+      });
+
+      const formattedList: any[] = [];
+
+      for (const otherUser of allUsers) {
+        // Look for an existing conversation history
+        const chat = await this.prisma.chat.findFirst({
+          where: {
+            isGroup: false,
+            AND: [
+              { participants: { some: { userId: currentUser.id } } },
+              { participants: { some: { userId: otherUser.id } } }
+            ]
+          },
+          include: {
+            messages: {
+              orderBy: { createdAt: 'desc' },
+              take: 1, // Get only the very last message
+              include: { sender: true }
+            },
+            _count: {
+              select: {
+                messages: {
+                  where: { senderId: otherUser.id, isRead: false }
                 }
               }
             }
-          },
-          messages: {
-            orderBy: { createdAt: 'desc' },
-            take: 1, // Still only grab the text of the latest message for the UI
-            include: { sender: true }
           }
-        }
-      });
-
-      const formattedChats = chats
-        .filter(chat => chat.messages.length > 0)
-        .map(chat => {
-          const latestMessage = chat.messages[0];
-          let displayRoomName: string = chat.name || '';
-          
-          // 🚀 FIX: Tell TypeScript this can be a string OR null
-          let contactName: string | null = null; 
-
-          if (!chat.isGroup) {
-            const otherPerson = chat.participants.find(p => p.userId !== user.id);
-            
-            // 🚀 Use the 'name' field from your Prisma schema
-            contactName = otherPerson?.user.name || null;
-            
-            displayRoomName = contactName || otherPerson?.user.email || 'Unknown';
-          }
-
-          return {
-            roomID: displayRoomName,
-            contactName: contactName,
-            text: latestMessage.text,
-            email: latestMessage.sender.email,
-            sender: latestMessage.sender.email,
-            senderName: latestMessage.sender.name,
-            timestamp: latestMessage.createdAt.getTime(),
-            unreadCount: chat._count.messages 
-          };
         });
 
-      return formattedChats.sort((a, b) => b.timestamp - a.timestamp);
+        const latestMessage = chat?.messages[0];
+
+        // 🚀 Send the exact same JSON format Flutter expects
+        formattedList.push({
+          roomID: otherUser.email,
+          contactName: otherUser.name,
+          email: otherUser.email,
+          // If no old messages exist, show a default text
+          text: latestMessage ? latestMessage.text : "Tap to start chatting", 
+          sender: latestMessage?.sender.email,
+          senderName: latestMessage?.sender.name,
+          timestamp: latestMessage ? latestMessage.createdAt.getTime() : otherUser.createdAt.getTime(),
+          unreadCount: chat?._count.messages || 0
+        });
+      }
+
+      return formattedList;
+
     } catch (error) {
-      console.error(`🚨 Error fetching ${type}s:`, error);
+      console.error(`🚨 Error fetching list:`, error);
       return [];
     }
   }

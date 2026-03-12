@@ -287,15 +287,15 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: isGroup ? const Color(0xFF128C7E) : Colors.grey.shade400,
               child: Icon(isGroup ? Icons.group : Icons.person, color: Colors.white),
             ),
-            // 🚀 Use the real contactName from the database. 
-            // If they haven't set a name yet, it will safely fall back to showing their email.
+            // 🚀 1. THE TITLE: Look for the real name first!
             title: Text(
-              chat['contactName'] ?? chat['email'] ?? 'Unknown User', 
+              chat['contactName'] ?? chat['roomID'] ?? chat['email'] ?? 'Unknown User',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
 
+            // 🚀 2. THE SUBTITLE: Show the sender's real name next to the message
             subtitle: Text(
-              "${chat['contactName'] ?? chat['email']}: ${chat['text']}",
+              "${chat['senderName'] ?? 'User'}: ${chat['text']}",
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: Colors.grey),
