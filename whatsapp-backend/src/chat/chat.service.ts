@@ -43,15 +43,21 @@ export class ChatService {
         .map(chat => {
           const latestMessage = chat.messages[0];
           let displayRoomName = chat.name;
+          let contactName = null;
+
           if (!chat.isGroup) {
             const otherPerson = chat.participants.find(p => p.userId !== user.id);
             displayRoomName = otherPerson?.user.name || otherPerson?.user.email || 'Unknown';
+            contactName = otherPerson?.user.name;
           }
 
           return {
             roomID: displayRoomName,
+            contactName: contactName,
             text: latestMessage.text,
+            email: latestMessage.sender.email,
             sender: latestMessage.sender.email,
+            senderName: latestMessage.sender.name,
             timestamp: latestMessage.createdAt.getTime(),
             unreadCount: chat._count.messages // 🚀 Pass the actual count to Flutter!
           };

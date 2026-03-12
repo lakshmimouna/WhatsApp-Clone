@@ -1,18 +1,25 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
-import { ChatService } from './chat.service';
+import { Controller, Post, Body, Get } from '@nestjs/common';
+import { UsersService } from '../users/users.service';
 
-@Controller('chat')
-export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
 
-  @Get('recent/:type')
-  async getRecent(@Param('type') type: 'chat' | 'group', @Query('user') user: string) {
-    return this.chatService.getRecentItems(type, user);
+  // 🚀 Fetch contacts/users for your Home Screen
+  @Get()
+  async getAllUsers() {
+    return this.usersService.getAllUsers();
   }
 
-  // 🚀 ADD THIS NEW ROUTE
-  @Get('history')
-  async getHistory(@Query('user1') user1: string, @Query('user2') user2: string) {
-    return this.chatService.getChatHistory(user1, user2);
+  // 🚀 Catch the FCM token from Flutter for push notifications
+  @Post('save-token')
+  async saveToken(@Body() body: { email: string; fcmToken: string }) {
+    return this.usersService.saveToken(body.email, body.fcmToken);
+  }
+
+  // 🚀 Save the actual username from the Flutter pop-up
+  @Post('update-name')
+  async updateUsername(@Body() body: { email: string; username: string }) {
+    return this.usersService.updateName(body.email, body.username);
   }
 }

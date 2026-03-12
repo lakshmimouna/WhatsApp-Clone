@@ -17,4 +17,9 @@ export class UsersController {
     // We pass the exact email and token from the body to your service
     return this.usersService.saveToken(body.email, body.fcmToken);
   }
-}
+
+  @Post('update-name')
+  async updateUsername(@Body() body: { email: string; username: string }) {
+    return this.usersService.updateName(body.email, body.username);
+  }
+}

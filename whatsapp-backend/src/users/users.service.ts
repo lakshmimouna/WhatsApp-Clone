@@ -57,4 +57,15 @@ export class UsersService {
       return null;
     }
   }
+
+  // Add this inside your UsersService class:
+  async updateName(email: string, newName: string) {
+    // 🚀 PRISMA SYNTAX: This will actually save the name to Neon!
+    const updatedUser = await this.prisma.user.update({
+      where: { email: email },
+      data: { name: newName }, // Note: Change 'name' to 'username' if that is what your Prisma schema uses!
+    });
+
+    return { success: true, user: updatedUser };
+  }
 }

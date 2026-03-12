@@ -69,10 +69,7 @@ class LoginScreen extends StatelessWidget {
       // 🚀 -------------------------------------- 🚀
 
       if (context.mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
-        );
+        _showUsernameDialog(context, userEmail);
       }
     } catch (e) {
       print("🚨 LOGIN ERROR: $e");
@@ -83,6 +80,62 @@ class LoginScreen extends StatelessWidget {
       }
     }
   }
+
+  void _showUsernameDialog(BuildContext context, String userEmail) {
+    final TextEditingController _usernameController = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Enter your name"),
+          content: TextField(
+            controller: _usernameController,
+            decoration: const InputDecoration(hintText: "Your Name"),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () async {
+                final String chosenName = _usernameController.text.trim();
+                
+                if (chosenName.isNotEmpty) {
+                  print("🚀 ATTEMPTING TO SAVE NAME: $chosenName for $userEmail");
+                  
+                  try {
+                    // 🚨 IMPORTANT: Make sure this URL is your ACTUAL Render URL!
+                    final response = await http.post(
+                      Uri.parse('https://whatsapp-clone-backend-navv.onrender.com/users/update-name'), 
+                      headers: {'Content-Type': 'application/json'},
+                      body: jsonEncode({
+                        "email": userEmail, 
+                        "username": chosenName
+                      }),
+                    );
+
+                    print("🔥 BACKEND RESPONSE CODE: ${response.statusCode}");
+                    print("🔥 BACKEND RESPONSE BODY: ${response.body}");
+
+                  } catch (e) {
+                    print("🚨 CRITICAL ERROR SAVING NAME: $e");
+                  }
+
+                  if (context.mounted) {
+                    Navigator.pop(context); 
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const HomeScreen()),
+                    );
+                  }
+                }
+              },
+              child: const Text("Save & Continue"),
+            )
+          ],
+        );
+      },
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {

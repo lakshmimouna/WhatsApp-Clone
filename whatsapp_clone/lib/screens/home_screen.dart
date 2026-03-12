@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
+import '../services/socket_service.dart'; // Add this import
 import 'chat_screen.dart';
 import 'onboarding_screen.dart';
 
@@ -19,15 +22,67 @@ class _HomeScreenState extends State<HomeScreen> {
   List<dynamic> _recentGroups = []; 
   bool _isLoading = true;
   
+  bool _isSearching = false;
+  TextEditingController _searchController = TextEditingController();
+  String _query = "";
+  
   // 🚀 Setting your EMAIL so the database knows exactly who is looking at the screen
   String get currentUser {
     return FirebaseAuth.instance.currentUser?.email ?? "Guest User";
   }
 
+  // 🚀 The Notification Engine
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
   @override
   void initState() {
     super.initState();
-    _fetchData();
+    
+    // 🚀 1. Setup the Android Notification Channel
+    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
+    // 🚀 THE FIX: The parameter is literally just called "settings" now!
+    flutterLocalNotificationsPlugin.initialize(
+      settings: initializationSettings, 
+    );
+
+    // 🚀 2. NEW: Ask Android for permission to show the notification!
+    flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchData(); 
+      
+      // 🚀 Start the global socket using your email!
+      SocketService().connect(currentUser); // Replace myEmail with however you get the logged-in user's email
+      
+      // 🚀 Listen for incoming messages globally to update the unread count!
+      SocketService().socket!.on('receiveMessage', (data) async {
+        if (mounted) {
+          print("🏠 HOME SCREEN HEARD A MESSAGE! Refreshing list...");
+          _fetchData(); 
+
+          // 🚀 3. Only show the notification if I am NOT the sender!
+          if (data['sender'] != currentUser) {
+            const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+              'chat_channel_id', 'Chat Messages',
+              importance: Importance.max,
+              priority: Priority.high,
+              showWhen: true,
+            );
+            const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
+            
+            // 🚀 FIX 2: Label every single parameter!
+            await flutterLocalNotificationsPlugin.show(
+              id: 0, 
+              title: data['sender'].split('@')[0], 
+              body: data['text'].startsWith('[IMAGE]') ? '📷 Sent a photo' : data['text'], 
+              notificationDetails: platformDetails,
+            );
+          }
+        }
+      });
+    });
   }
 
   Future<void> _fetchData() async {
@@ -137,9 +192,32 @@ class _HomeScreenState extends State<HomeScreen> {
         appBar: AppBar(
           backgroundColor: const Color(0xFF128C7E),
           foregroundColor: Colors.white,
-          title: const Text('WhatsApp Clone', style: TextStyle(fontWeight: FontWeight.bold)),
+          title: _isSearching
+              ? TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    hintText: 'Search...',
+                    hintStyle: TextStyle(color: Colors.white60),
+                    border: InputBorder.none,
+                  ),
+                  onChanged: (val) => setState(() => _query = val),
+                )
+              : const Text('WhatsApp Clone', style: TextStyle(fontWeight: FontWeight.bold)),
           actions: [
-            IconButton(icon: const Icon(Icons.search), onPressed: () {}),
+            IconButton(
+              icon: Icon(_isSearching ? Icons.close : Icons.search),
+              onPressed: () {
+                setState(() {
+                  _isSearching = !_isSearching;
+                  if (!_isSearching) {
+                    _query = "";
+                    _searchController.clear();
+                  }
+                });
+              },
+            ),
             IconButton(
               icon: const Icon(Icons.logout),
               onPressed: () async {
@@ -181,12 +259,17 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_isLoading) return const Center(child: CircularProgressIndicator(color: Color(0xFF128C7E)));
     if (data.isEmpty) return Center(child: Text(isGroup ? "No groups yet" : "No chats yet", style: const TextStyle(color: Colors.grey)));
 
+    final filteredData = data.where((item) {
+      final name = item['roomID'].toString().toLowerCase();
+      return name.contains(_query.toLowerCase());
+    }).toList();
+
     return RefreshIndicator(
       onRefresh: _fetchData,
       child: ListView.builder(
-        itemCount: data.length,
+        itemCount: filteredData.length,
         itemBuilder: (context, index) {
-          final item = data[index];
+          final item = filteredData[index];
           String timeString = "";
           if (item["timestamp"] != null) {
             DateTime date = DateTime.fromMillisecondsSinceEpoch(item["timestamp"] as int);
@@ -195,17 +278,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // 🚀 Grab the unread count from your backend!
           final int unreadCount = item['unreadCount'] ?? 0;
+          final chat = item; // alias so the exact snippet works!
+
+          print("🔥 RAW DATA FROM BACKEND: $chat");
 
           return ListTile(
             leading: CircleAvatar(
               backgroundColor: isGroup ? const Color(0xFF128C7E) : Colors.grey.shade400,
               child: Icon(isGroup ? Icons.group : Icons.person, color: Colors.white),
             ),
+            // 🚀 Use the real contactName from the database. 
+            // If they haven't set a name yet, it will safely fall back to showing their email.
             title: Text(
-              isGroup ? item['roomID'].toString().replaceAll('Group:', '') : item['roomID'],
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              chat['contactName'] ?? chat['email'] ?? 'Unknown User', 
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
-            subtitle: Text("${item['sender']}: ${item['text']}", maxLines: 1, overflow: TextOverflow.ellipsis),
+
+            subtitle: Text(
+              "${chat['contactName'] ?? chat['email']}: ${chat['text']}",
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.grey),
+            ),
             
             // 🚀 The Green Circle UI Magic Happens Here
             trailing: Column(
@@ -230,25 +324,22 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             onTap: () async {
-              // 🚀 THE ERASER TRIGGER: Tell NestJS to clear the circle BEFORE opening the chat!
-              if (unreadCount > 0) {
-                try {
-                  String safeUser = Uri.encodeComponent(currentUser);
-                  // 🚀 THE NEW CLOUD ERASER URL!
-                  final String markReadUrl = 'https://whatsapp-clone-backend-navv.onrender.com/chat/mark-read/${item['roomID']}?user=$safeUser';
-                  await http.get(Uri.parse(markReadUrl));
-                } catch (e) {
-                  print("Could not mark as read: $e");
-                }
-              }
+              // 🚀 1. The "Senior Hack": Instantly hide the green circle locally!
+              setState(() {
+                item['unreadCount'] = 0; 
+              });
 
-              // Open the Chat Screen
+              // 2. Open the chat
               await Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => ChatScreen(contactName: item['roomID'])),
+                MaterialPageRoute(
+                  builder: (context) => ChatScreen(
+                    contactName: isGroup ? item['roomID'].toString().replaceAll('Group:', '') : item['roomID'],
+                  ),
+                ),
               );
               
-              // Refresh the Home Screen when you press the back button
+              // 3. When you return, silently fetch the new latest message text in the background
               _fetchData();
             },
           );
