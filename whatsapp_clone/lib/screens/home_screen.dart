@@ -92,8 +92,8 @@ class _HomeScreenState extends State<HomeScreen> {
       // 🚀 THE FIX: Safely encode your full name so the URL doesn't crash on the space!
       String safeUser = Uri.encodeComponent(currentUser);
 
-      final chatRes = await http.get(Uri.parse('$baseUrl/chat?user=$safeUser'));
-      final groupRes = await http.get(Uri.parse('$baseUrl/group?user=$safeUser'));
+      final chatRes = await http.get(Uri.parse('$baseUrl?type=chat&email=$safeUser'));
+      final groupRes = await http.get(Uri.parse('$baseUrl?type=group&email=$safeUser'));
 
       if (mounted) {
         if (chatRes.statusCode == 200 && groupRes.statusCode == 200) {
@@ -169,7 +169,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           // 2. Open the Chat Screen with this exact user!
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => ChatScreen(contactName: user['email'])),
+                            MaterialPageRoute(builder: (context) => ChatScreen(
+                              receiverEmail: user['email'],
+                              receiverName: displayName,
+                            )),
                           ).then((_) => _fetchData()); // Refresh home screen when you come back
                         },
                       );
@@ -246,11 +249,6 @@ class _HomeScreenState extends State<HomeScreen> {
             const Center(child: Text("Calls Under Construction", style: TextStyle(color: Colors.grey))),
           ],
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: _showContactsList, // 🚀 Now it opens the cloud contact list!
-          backgroundColor: const Color(0xFF25D366),
-          child: const Icon(Icons.chat, color: Colors.white),
-        ),
       ),
     );
   }
@@ -295,7 +293,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             // 🚀 2. THE SUBTITLE: Show the sender's real name next to the message
             subtitle: Text(
-              "${chat['senderName'] ?? 'User'}: ${chat['text']}",
+              "${chat['senderName'] ?? ''}: ${chat['text']}".replaceAll(RegExp(r'^: '), '').replaceAll(': Tap to start chatting', 'Tap to start chatting'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: Colors.grey),
@@ -334,7 +332,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => ChatScreen(
-                    contactName: isGroup ? item['roomID'].toString().replaceAll('Group:', '') : item['roomID'],
+                    receiverEmail: chat['email'] ?? chat['roomID'], 
+                    receiverName: chat['contactName'] ?? chat['email'] ?? chat['roomID'], 
                   ),
                 ),
               );

@@ -30,7 +30,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               // Screen 1
               _buildPage(
                 icon: Icons.chat,
-                title: "Welcome to WhatsApp",
+                title: "Welcome to WhatsApp Clone",
                 description: "A simple, secure, and reliable way to connect with your friends and family.",
               ),
               // Screen 2

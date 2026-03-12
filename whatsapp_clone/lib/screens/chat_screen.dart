@@ -6,22 +6,23 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'package:swipe_to/swipe_to.dart'; // 🚀 Add this import
-import '../services/socket_service.dart'; // Add this import
+import 'package:swipe_to/swipe_to.dart';
+import '../services/socket_service.dart'; 
 
 class ChatMessage {
   final String text;
   final String sender;
   final bool isMe;
   final String time;
-  bool isRead; // 🚀 No longer final!
+  bool isRead; 
   
   ChatMessage({required this.text, required this.sender, required this.isMe, required this.time, this.isRead = false});
 }
 
 class ChatScreen extends StatefulWidget {
-  final String contactName; // This is the OTHER person's email
-  const ChatScreen({super.key, required this.contactName});
+  final String receiverEmail; 
+  final String receiverName; 
+  const ChatScreen({super.key, required this.receiverEmail, required this.receiverName});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -30,7 +31,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   
-  List<ChatMessage> messages = [];
+  List<dynamic> messages = [];
   
   String get myEmail {
     return FirebaseAuth.instance.currentUser?.email ?? "Guest User";
@@ -38,11 +39,10 @@ class _ChatScreenState extends State<ChatScreen> {
   
   bool _isTyping = false; 
   bool _isLoading = true;
-  bool _isPeerTyping = false; // To track if the other person is typing
-  ChatMessage? _replyingTo; // Remembers the swiped message
-  String _peerStatus = "Offline"; // Defaults to offline until the server says otherwise
+  bool _isPeerTyping = false; 
+  dynamic _replyingTo; 
+  String _peerStatus = "Offline"; 
 
-  // 🚀 This specific variable remembers our Chat Screen's ear!
   Function(dynamic)? _messageHandler;
 
   void _cancelReply() {
@@ -52,42 +52,20 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchHistory(); // 🚀 Fetch old messages first!
+    // 🚀 FIX: Removed the broken wrapper function! These will actually run now.
+    _fetchHistory();
+    _listenForNewMessages();
 
-    // 🚀 1. Attach to the Global Socket
     final globalSocket = SocketService().socket!;
 
-    // 🚀 2. Tell the server we are looking at this chat
     globalSocket.emit('markAsRead', {
       "reader": myEmail,
-      "roomID": widget.contactName
+      "roomID": widget.receiverEmail
     });
 
-    // 🚀 1. Define exactly what this screen should do when it hears a message
-    _messageHandler = (data) {
-      print("🔥 CHAT SCREEN HEARD MESSAGE 2+: ${data['text']}"); // Proof it works!
-      
-      if (!mounted) return;
-      if ((data['roomID'] == widget.contactName && data['sender'] == myEmail) || 
-          (data['roomID'] == myEmail && data['sender'] == widget.contactName)) {
-        setState(() {
-          messages.insert(0, ChatMessage( // Change to .add() if your list is upside down
-            text: data['text'],
-            sender: data['sender'],
-            isMe: data['sender'] == myEmail,
-            time: TimeOfDay.now().format(context),
-            isRead: false, 
-          ));
-        });
-      }
-    };
-
-    // 🚀 2. Attach the specific ear to the socket
-    globalSocket.on('receiveMessage', _messageHandler!);
-
-    // 🚀 4. Listen for Online Status
+    // Listen for Online Status
     globalSocket.on('userStatusChanged', (data) {
-      if (mounted && data['email'] == widget.contactName) {
+      if (mounted && data['email'] == widget.receiverEmail) {
         setState(() {
           _peerStatus = data['status'];
         });
@@ -99,9 +77,8 @@ class _ChatScreenState extends State<ChatScreen> {
         setState(() {
           _isTyping = _messageController.text.isNotEmpty;
         });
-        // 🚀 Emit typing status to the server
         SocketService().socket!.emit('typing', {
-          "roomID": widget.contactName,
+          "roomID": widget.receiverEmail,
           "sender": myEmail,
           "isTyping": _messageController.text.isNotEmpty,
         });
@@ -109,79 +86,74 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  // 🚀 GRAB OLD MESSAGES FROM NEON DATABASE
+  // 🚀 FIX: Moved this outside of initState so it works properly
+  void _listenForNewMessages() {
+    final socket = SocketService().socket!;
+    _messageHandler = (data) {
+      if (mounted && data['sender'] == widget.receiverEmail) {
+        setState(() {
+          messages.add({
+            "text": data['text'],
+            "sender": data['sender'],
+            "timestamp": data['timestamp'] ?? DateTime.now().millisecondsSinceEpoch,
+            "isRead": false,
+          });
+        });
+      }
+    };
+    socket.on('receiveMessage', _messageHandler!);
+  }
+
   Future<void> _fetchHistory() async {
+    final safeMe = Uri.encodeComponent(myEmail);
+    final safeThem = Uri.encodeComponent(widget.receiverEmail);
+    final url = Uri.parse(
+        'https://whatsapp-clone-backend-navv.onrender.com/chat/history?user1=$safeMe&user2=$safeThem');
+
     try {
-      final safeMe = Uri.encodeComponent(myEmail);
-      final safeThem = Uri.encodeComponent(widget.contactName);
-      final url = Uri.parse('https://whatsapp-clone-backend-navv.onrender.com/chat/history?user1=$safeMe&user2=$safeThem');
-      
       final response = await http.get(url);
-      
       if (response.statusCode == 200) {
-        final List<dynamic> historyData = jsonDecode(response.body);
-        
         if (mounted) {
           setState(() {
-            messages = historyData.map((msg) {
-              DateTime date = DateTime.fromMillisecondsSinceEpoch(msg['timestamp'] as int);
-              String timeString = DateFormat('h:mm a').format(date);
-              
-              return ChatMessage(
-                text: msg['text'],
-                sender: msg['sender'],
-                isMe: msg['sender'] == myEmail,
-                time: timeString,
-                isRead: msg['isRead'] ?? false,
-              );
-            }).toList();
-            
-            _isLoading = false; // Stop the spinner!
+            messages = jsonDecode(response.body);
+            _isLoading = false;
           });
         }
       }
     } catch (e) {
-      print('🚨 Error fetching history: $e');
-      if (mounted) setState(() => _isLoading = false); // Stop spinner even if error
+      print("🚨 Error fetching history: $e");
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // Deleted _connectToRender()
-
   void _sendMessage() {
-    if (_messageController.text.isEmpty) return;
+    if (_messageController.text.trim().isEmpty) return;
 
-    final textToSend = _messageController.text;
-    _messageController.clear();
-    setState(() => _isTyping = false);
+    final messageText = _messageController.text.trim();
 
-    // 🚀 1. INSTANTLY draw it on YOUR screen so it feels fast!
-    setState(() {
-      messages.insert(0, ChatMessage( // Change to messages.add(...) if your screen is upside down
-        text: textToSend,
-        sender: myEmail,
-        isMe: true,
-        time: TimeOfDay.now().format(context),
-        isRead: false,
-      ));
-    });
-
-    // 2. Send it to the cloud for the other person
-    SocketService().socket!.emit('sendMessage', {
-      "roomID": widget.contactName,
-      "text": textToSend,
+    final messagePayload = {
+      "text": messageText,
       "sender": myEmail,
+      // 🚀 THE FIX: Change this back to "roomID" to match the NestJS Gateway perfectly!
+      "roomID": widget.receiverEmail, 
+      "timestamp": DateTime.now().millisecondsSinceEpoch,
+    };
+
+    setState(() {
+      messages.add(messagePayload);
+      _messageController.clear();
+      _isTyping = false;
     });
+
+    SocketService().socket!.emit('sendMessage', messagePayload);
   }
 
-  // 🚀 IMPORTANT: Clean up the listeners when you leave the chat screen!
   @override
   void dispose() {
     final globalSocket = SocketService().socket;
     if (globalSocket != null && _messageHandler != null) {
-      // 🚀 3. Remove ONLY this screen's ear! The Home Screen stays alive.
       globalSocket.off('receiveMessage', _messageHandler);
-      globalSocket.off('userStatusChanged'); // Leave this general drop since home screen doesn't use it
+      globalSocket.off('userStatusChanged'); 
     }
     _messageController.dispose();
     super.dispose();
@@ -197,9 +169,9 @@ class _ChatScreenState extends State<ChatScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.contactName.split('@')[0], style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(widget.receiverName, style: const TextStyle(fontWeight: FontWeight.bold)),
             Text(
-              _isPeerTyping ? "typing..." : _peerStatus, // 🚀 Shows typing, Online, or Last Seen!
+              _isPeerTyping ? "typing..." : _peerStatus, 
               style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.normal),
             ),
           ],
@@ -216,11 +188,23 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final message = messages[messages.length - 1 - index]; 
+                    
+                    String formattedTime = "";
+                    if (message['timestamp'] != null) {
+                      DateTime date = DateTime.fromMillisecondsSinceEpoch(message['timestamp']);
+                      formattedTime = DateFormat('h:mm a').format(date);
+                    }
+
                     return SwipeTo(
                       onRightSwipe: (details) {
                         setState(() => _replyingTo = message);
                       },
-                      child: _buildMessageBubble(message.text, message.time, message.isMe, message.isRead),
+                      child: _buildMessageBubble(
+                        message['text'] ?? "", 
+                        formattedTime, 
+                        message['sender'] == myEmail, 
+                        message['isRead'] ?? false
+                      ),
                     );
                   },
                 ),
@@ -232,7 +216,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageBubble(String text, String time, bool isMe, bool isRead) {
-    // 1. Check if it's an image
     bool isImage = text.startsWith('[IMAGE]');
     String imageUrl = isImage ? text.replaceAll('[IMAGE]', '') : '';
 
@@ -248,18 +231,15 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            
-            // 2. Draw the Image OR the Text
             if (isImage)
               GestureDetector(
-                // 🚀 3. Make the image clickable to open full-screen!
                 onTap: () {
                   showDialog(
                     context: context,
                     builder: (_) => Dialog(
                       backgroundColor: Colors.transparent,
                       insetPadding: EdgeInsets.zero,
-                      child: InteractiveViewer( // Allows pinching and zooming!
+                      child: InteractiveViewer( 
                         panEnabled: true,
                         minScale: 0.5,
                         maxScale: 4.0,
@@ -307,16 +287,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _pickAndSendImage() async {
     final ImagePicker picker = ImagePicker();
-    // 1. Pick an image from the gallery (compressed to save data)
     final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
 
-    if (image == null) return; // The user canceled picking an image
+    if (image == null) return; 
 
-    // Show the loading spinner while it uploads
     setState(() => _isLoading = true);
 
     try {
-      // 🚀 2. THE SHORTCUT: Upload to ImgBB's free API
       const String imgbbApiKey = 'c78e4b02ab9842b6bc7a08916d3c2666'; 
       
       final File file = File(image.path);
@@ -331,10 +308,10 @@ class _ChatScreenState extends State<ChatScreen> {
         final String imageUrl = jsonResponse['data']['url'];
         print('✅ Image uploaded successfully: $imageUrl');
 
-        // 🚀 3. Send the Image URL through your NestJS WebSocket!
         SocketService().socket!.emit('sendMessage', {
-          "roomID": widget.contactName,
-          "text": "[IMAGE]$imageUrl", // Our special tag!
+          // 🚀 THE FIX: Change this to "roomID" as well!
+          "roomID": widget.receiverEmail, 
+          "text": "[IMAGE]$imageUrl", 
           "sender": myEmail,
         });
       } else {
@@ -356,18 +333,18 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       child: Row(
         children: [
-          Container(width: 4, height: 40, color: const Color(0xFF128C7E)), // WhatsApp green line
+          Container(width: 4, height: 40, color: const Color(0xFF128C7E)), 
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _replyingTo!.isMe ? "You" : widget.contactName.split('@')[0], 
+                  _replyingTo!['sender'] == myEmail ? "You" : widget.receiverName, 
                   style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF128C7E))
                 ),
                 Text(
-                  _replyingTo!.text.startsWith('[IMAGE]') ? '📷 Photo' : _replyingTo!.text, 
+                  _replyingTo!['text'].toString().startsWith('[IMAGE]') ? '📷 Photo' : _replyingTo!['text'], 
                   maxLines: 1, 
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.black54),
@@ -388,7 +365,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (_replyingTo != null) _buildReplyPreview(), // 🚀 Pops up when swiped!
+        if (_replyingTo != null) _buildReplyPreview(), 
         Container(
           padding: const EdgeInsets.all(8),
           color: Colors.white,
@@ -398,7 +375,6 @@ class _ChatScreenState extends State<ChatScreen> {
               Expanded(
                 child: TextField(
                   controller: _messageController,
-                  // 🚀 ADD THIS LINE: Forces the keyboard to capitalize the first letter of sentences!
                   textCapitalization: TextCapitalization.sentences, 
                   decoration: const InputDecoration(hintText: "Type a message", border: InputBorder.none),
                 ),
@@ -408,7 +384,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 onPressed: () {
                   if (_isTyping) {
                     _sendMessage();
-                    _cancelReply(); // 🚀 Clear the reply box after sending!
+                    _cancelReply(); 
                   }
                 },
               ),
