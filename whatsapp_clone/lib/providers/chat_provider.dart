@@ -9,7 +9,7 @@ class ChatProvider extends ChangeNotifier {
   String currentUser = "Guest User";
   
   final storage = const FlutterSecureStorage();
-  final String backendUrl = 'http://192.168.1.12:3000';
+  final String backendUrl = 'https://whatsapp-clone-backend-navv.onrender.com';
 
   Future<void> loadUser() async {
     String? email = await storage.read(key: 'user_email');

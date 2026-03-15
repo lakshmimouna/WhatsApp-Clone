@@ -23,7 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final storage = const FlutterSecureStorage();
   
   // 🚀 Updated to your Local IP!
-  final String backendUrl = 'http://192.168.1.12:3000';
+  final String backendUrl = 'https://whatsapp-clone-backend-navv.onrender.com';
 
   Future<void> _submitForm() async {
     setState(() => _isLoading = true);
