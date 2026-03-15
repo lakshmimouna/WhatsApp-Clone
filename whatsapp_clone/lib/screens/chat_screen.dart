@@ -31,6 +31,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
+  final FocusNode _messageFocusNode = FocusNode(); // 🚀 1. Keep keyboard open focus node
   
   List<dynamic> messages = [];
   
@@ -74,16 +75,35 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     });
 
-    _messageController.addListener(() {
+    // Listen for the read receipt from the other user
+    globalSocket.on('messagesRead', (data) {
       if (mounted) {
         setState(() {
-          _isTyping = _messageController.text.isNotEmpty;
+          // Loop through all messages on the screen and turn them blue
+          for (var msg in messages) {
+            msg['isRead'] = true;
+          }
         });
-        SocketService().socket!.emit('typing', {
-          "roomID": widget.receiverEmail,
-          "sender": myEmail,
-          "isTyping": _messageController.text.isNotEmpty,
-        });
+      }
+    });
+
+    _messageController.addListener(() {
+      if (mounted) {
+        bool typingNow = _messageController.text.isNotEmpty;
+        
+        // 🚀 THE FIX: ONLY rebuild the screen if the typing status ACTUALLY changes!
+        // This stops the screen from refreshing on every single letter you type or when you hit send.
+        if (_isTyping != typingNow) {
+          setState(() {
+            _isTyping = typingNow;
+          });
+          
+          SocketService().socket!.emit('typing', {
+            "roomID": widget.receiverEmail,
+            "sender": myEmail,
+            "isTyping": typingNow,
+          });
+        }
       }
     });
   }
@@ -137,15 +157,22 @@ class _ChatScreenState extends State<ChatScreen> {
       "sender": myEmail,
       "roomID": widget.receiverEmail, 
       "timestamp": DateTime.now().millisecondsSinceEpoch,
+      // 🚀 ADD THESE TWO LINES TO CATCH THE REPLY
+      "replyToText": _replyingTo != null ? _replyingTo!['text'] : null,
+      "replyToSender": _replyingTo != null ? _replyingTo!['sender'] : null,
     };
 
     setState(() {
       messages.add(messagePayload);
       _messageController.clear();
       _isTyping = false;
+      _replyingTo = null; // Clear the reply preview after sending
     });
 
     SocketService().socket!.emit('sendMessage', messagePayload);
+    
+    // 🚀 3. Force the keyboard to stay open!
+    _messageFocusNode.requestFocus(); 
   }
 
   @override
@@ -156,6 +183,7 @@ class _ChatScreenState extends State<ChatScreen> {
       globalSocket.off('userStatusChanged'); 
     }
     _messageController.dispose();
+    _messageFocusNode.dispose();
     super.dispose();
   }
 
@@ -203,7 +231,10 @@ class _ChatScreenState extends State<ChatScreen> {
                         message['text'] ?? "", 
                         formattedTime, 
                         message['sender'] == myEmail, 
-                        message['isRead'] ?? false
+                        message['isRead'] ?? false,
+                        // 🚀 ADD THESE TWO VARIABLES
+                        message['replyToText'],
+                        message['replyToSender'],
                       ),
                     );
                   },
@@ -215,7 +246,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(String text, String time, bool isMe, bool isRead) {
+  Widget _buildMessageBubble(String text, String time, bool isMe, bool isRead, String? replyText, String? replySender) {
     bool isImage = text.startsWith('[IMAGE]');
     String imageUrl = isImage ? text.replaceAll('[IMAGE]', '') : '';
 
@@ -227,10 +258,40 @@ class _ChatScreenState extends State<ChatScreen> {
         decoration: BoxDecoration(
           color: isMe ? const Color(0xFFDCF8C6) : Colors.white,
           borderRadius: BorderRadius.circular(12),
+          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 1, offset: Offset(0, 1))], // Added slight shadow for a cleaner look
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
+          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
+            // 🚀 THE QUOTED MESSAGE BOX
+            if (replyText != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: const Border(left: BorderSide(color: Color(0xFF128C7E), width: 4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      replySender == myEmail ? "You" : widget.receiverName,
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF128C7E), fontSize: 12),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      replyText.startsWith('[IMAGE]') ? '📷 Photo' : replyText,
+                      style: const TextStyle(color: Colors.black54, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+
+            // YOUR EXISTING MESSAGE CONTENT (Image or Text)
             if (isImage)
               GestureDetector(
                 onTap: () {
@@ -374,6 +435,7 @@ class _ChatScreenState extends State<ChatScreen> {
               Expanded(
                 child: TextField(
                   controller: _messageController,
+                  focusNode: _messageFocusNode, // 🚀 2. Attach it here!
                   textCapitalization: TextCapitalization.sentences, 
                   decoration: const InputDecoration(hintText: "Type a message", border: InputBorder.none),
                 ),

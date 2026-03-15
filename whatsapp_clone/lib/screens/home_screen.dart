@@ -49,10 +49,23 @@ class _HomeScreenState extends State<HomeScreen> {
       
       SocketService().socket!.on('receiveMessage', (data) async {
         if (mounted) {
-          print("🏠 HOME SCREEN HEARD A MESSAGE! Refreshing list via Provider...");
-          chatProvider.fetchRecentChats(); 
+          print("🏠 HOME SCREEN HEARD A MESSAGE! Updating single chat via Provider...");
+          chatProvider.updateSingleChat(data);
 
           if (data['sender'] != chatProvider.currentUser) {
+            String senderEmail = data['sender'];
+            String senderName = senderEmail; // Default to email just in case
+
+            // Look up the real name from your existing chat list
+            try {
+              var matchingChat = chatProvider.recentChats.firstWhere((chat) => chat['email'] == senderEmail || chat['roomID'] == senderEmail);
+              if (matchingChat != null && matchingChat['contactName'] != null) {
+                senderName = matchingChat['contactName']; // We found the name!
+              }
+            } catch (e) {
+              // If it fails, it just falls back to showing the email
+            }
+
             const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
               'chat_channel_id', 'Chat Messages',
               importance: Importance.max,
@@ -63,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
             
             await flutterLocalNotificationsPlugin.show(
               id: 0, 
-              title: data['sender'].split('@')[0], 
+              title: senderName, 
               body: data['text'].startsWith('[IMAGE]') ? '📷 Sent a photo' : data['text'], 
               notificationDetails: platformDetails,
             );
@@ -150,7 +163,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final chatProvider = context.watch<ChatProvider>();
 
     return DefaultTabController(
       length: 3,
@@ -187,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
             IconButton(
               icon: const Icon(Icons.logout),
               onPressed: () async {
-                final userEmail = chatProvider.currentUser;
+                final userEmail = Provider.of<ChatProvider>(context, listen: false).currentUser;
                 
                 if (userEmail.isNotEmpty && userEmail != "Guest User") {
                   try {
@@ -221,7 +233,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         body: TabBarView(
           children: [
-            _buildChatList(chatProvider.recentChats, chatProvider.isLoadingChats, isGroup: false),
+            Consumer<ChatProvider>(
+              builder: (context, chatProvider, child) {
+                return _buildChatList(chatProvider.recentChats, chatProvider.isLoadingChats, isGroup: false);
+              },
+            ),
             _buildChatList(_recentGroups, false, isGroup: true),
             const Center(child: Text("Calls Under Construction", style: TextStyle(color: Colors.grey))),
           ],

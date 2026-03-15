@@ -11,16 +11,16 @@ export class ChatService {
       const currentUser = await this.prisma.user.findUnique({ where: { email: userEmail } });
       if (!currentUser) return [];
 
-      // 🚀 Fetch ALL users except yourself, newest first!
+      // 🚀 1. Fetch ALL users except yourself, newest registrations first
       const allUsers = await this.prisma.user.findMany({
         where: { id: { not: currentUser.id } },
-        orderBy: { createdAt: 'desc' }, // Latest added users at the top
+        orderBy: { createdAt: 'desc' }, 
       });
 
       const formattedList: any[] = [];
 
       for (const otherUser of allUsers) {
-        // Look for an existing conversation history
+        // Look for existing messages
         const chat = await this.prisma.chat.findFirst({
           where: {
             isGroup: false,
@@ -32,39 +32,34 @@ export class ChatService {
           include: {
             messages: {
               orderBy: { createdAt: 'desc' },
-              take: 1, // Get only the very last message
+              take: 1, // Get only the last message
               include: { sender: true }
             },
             _count: {
-              select: {
-                messages: {
-                  where: { senderId: otherUser.id, isRead: false }
-                }
-              }
+              select: { messages: { where: { senderId: otherUser.id, isRead: false } } }
             }
           }
         });
 
         const latestMessage = chat?.messages[0];
 
-        // 🚀 Send the exact same JSON format Flutter expects
         formattedList.push({
           roomID: otherUser.email,
           contactName: otherUser.name,
           email: otherUser.email,
-          // If no old messages exist, show a default text
           text: latestMessage ? latestMessage.text : "Tap to start chatting", 
           sender: latestMessage?.sender.email,
           senderName: latestMessage?.sender.name,
+          // 🚀 2. Sort by the latest message time, or when they joined if no messages exist
           timestamp: latestMessage ? latestMessage.createdAt.getTime() : otherUser.createdAt.getTime(),
           unreadCount: chat?._count.messages || 0
         });
       }
 
+      // 🚀 3. Final sort: Push the most recently active chats to the very top!
       formattedList.sort((a, b) => b.timestamp - a.timestamp);
 
       return formattedList;
-
     } catch (error) {
       console.error(`🚨 Error fetching list:`, error);
       return [];
