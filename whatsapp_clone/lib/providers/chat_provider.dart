@@ -87,6 +87,25 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  void updateSingleChat(dynamic newMessage) {
+    // 1. Find the index of the chat that needs updating
+    int index = recentChats.indexWhere((chat) => chat['roomID'] == newMessage['roomID']);
+
+    if (index != -1) {
+      // 2. Update only the text and timestamp for that specific chat
+      recentChats[index]['text'] = newMessage['text'];
+      recentChats[index]['timestamp'] = newMessage['timestamp'];
+      recentChats[index]['unreadCount'] = (recentChats[index]['unreadCount'] ?? 0) + 1;
+
+      // 3. Move this chat to the top of the list (optional, like WhatsApp)
+      var updatedChat = recentChats.removeAt(index);
+      recentChats.insert(0, updatedChat);
+
+      // 4. Tell the UI to update, but now it's just moving one item
+      notifyListeners();
+    }
+  }
+
   void clearUnreadCount(int index) {
     recentChats[index]['unreadCount'] = 0;
     notifyListeners();
