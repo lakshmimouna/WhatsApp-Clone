@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart'; // 🚀 Added Provider
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:swipe_to/swipe_to.dart';
 import '../services/socket_service.dart'; 
+import '../providers/chat_provider.dart'; // 🚀 Added ChatProvider
 
 class ChatMessage {
   final String text;
@@ -33,9 +34,8 @@ class _ChatScreenState extends State<ChatScreen> {
   
   List<dynamic> messages = [];
   
-  String get myEmail {
-    return FirebaseAuth.instance.currentUser?.email ?? "Guest User";
-  }
+  // 🚀 myEmail is now instantly available!
+  late String myEmail;
   
   bool _isTyping = false; 
   bool _isLoading = true;
@@ -52,7 +52,10 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    // 🚀 FIX: Removed the broken wrapper function! These will actually run now.
+    
+    // 🚀 Instantly grab the email from the Brain—no waiting for Secure Storage!
+    myEmail = Provider.of<ChatProvider>(context, listen: false).currentUser;
+
     _fetchHistory();
     _listenForNewMessages();
 
@@ -63,7 +66,6 @@ class _ChatScreenState extends State<ChatScreen> {
       "roomID": widget.receiverEmail
     });
 
-    // Listen for Online Status
     globalSocket.on('userStatusChanged', (data) {
       if (mounted && data['email'] == widget.receiverEmail) {
         setState(() {
@@ -86,7 +88,6 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  // 🚀 FIX: Moved this outside of initState so it works properly
   void _listenForNewMessages() {
     final socket = SocketService().socket!;
     _messageHandler = (data) {
@@ -134,7 +135,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final messagePayload = {
       "text": messageText,
       "sender": myEmail,
-      // 🚀 THE FIX: Change this back to "roomID" to match the NestJS Gateway perfectly!
       "roomID": widget.receiverEmail, 
       "timestamp": DateTime.now().millisecondsSinceEpoch,
     };
@@ -309,7 +309,6 @@ class _ChatScreenState extends State<ChatScreen> {
         print('✅ Image uploaded successfully: $imageUrl');
 
         SocketService().socket!.emit('sendMessage', {
-          // 🚀 THE FIX: Change this to "roomID" as well!
           "roomID": widget.receiverEmail, 
           "text": "[IMAGE]$imageUrl", 
           "sender": myEmail,

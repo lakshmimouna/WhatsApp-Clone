@@ -5,17 +5,10 @@ import { UsersService } from './users.service';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  // The route to fetch contacts for your Home Screen
+  // Fetch contacts for your Home Screen
   @Get()
   async getAllUsers() {
     return this.usersService.getAllUsers();
-  }
-
-  // The route that catches the token from Flutter
-  @Post('save-token')
-  async saveToken(@Body() body: { email: string; fcmToken: string }) {
-    // We pass the exact email and token from the body to your service
-    return this.usersService.saveToken(body.email, body.fcmToken);
   }
 
   @Post('update-name')
@@ -23,9 +16,15 @@ export class UsersController {
     return this.usersService.updateName(body.email, body.username);
   }
 
-  // 🚀 The route Flutter will call right before signing out
-  @Post('clear-token')
-  async clearToken(@Body() body: { email: string }) {
-    return this.usersService.clearToken(body.email);
+  // 🚀 NEW: Custom Signup Route
+  @Post('signup')
+  async signup(@Body() body: { email: string; password: string; name?: string }) {
+    return this.usersService.signup(body.email, body.password, body.name);
   }
-}
+
+  // 🚀 NEW: Custom Login Route (Generates the JWT)
+  @Post('login')
+  async login(@Body() body: { email: string; password: string }) {
+    return this.usersService.login(body.email, body.password);
+  }
+}

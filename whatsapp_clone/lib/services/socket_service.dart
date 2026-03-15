@@ -14,13 +14,11 @@ class SocketService {
     
     currentUserEmail = email;
 
-    // 🚀 Replace with your actual Render URL!
-    socket = IO.io('https://whatsapp-clone-backend-navv.onrender.com', 
-      IO.OptionBuilder()
-        .setTransports(['websocket', 'polling']) 
-        .disableAutoConnect()
-        .build()
-    );
+    // Change it to exactly this:
+    socket = IO.io('https://whatsapp-clone-backend-navv.onrender.com', <String, dynamic>{
+      'transports': ['websocket'],
+      'autoConnect': false,
+    });
 
     socket!.connect();
 

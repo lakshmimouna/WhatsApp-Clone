@@ -1,10 +1,8 @@
 import { WebSocketGateway, SubscribeMessage, MessageBody, WebSocketServer, OnGatewayDisconnect, ConnectedSocket } from '@nestjs/websockets';
-import { OnModuleInit } from '@nestjs/common'; // 🚀 This is the correct import!
+import { OnModuleInit } from '@nestjs/common'; 
 import { Server, Socket } from 'socket.io';
 import { UsersService } from '../users/users.service';
 import { ChatService } from './chat.service';
-import * as admin from 'firebase-admin';
-import { PrismaClient } from '@prisma/client';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -48,6 +46,9 @@ export class ChatGateway implements OnModuleInit, OnGatewayDisconnect {
   @SubscribeMessage('sendMessage')
   async handleMessage(@MessageBody() payload: { sender: string; roomID: string; text: string }) {
     console.log('✉️ Message received:', payload);
+    
+    // 🚀 We broadcast the message via the socket. 
+    // The Flutter app will hear this and trigger a "Local Notification" if they are outside the chat!
     this.server.emit('receiveMessage', payload);
 
     try {
@@ -55,34 +56,8 @@ export class ChatGateway implements OnModuleInit, OnGatewayDisconnect {
     } catch (error) {
       console.error('🚨 Could not save message to database:', error);
     }
-
-    try {
-      const targetEmail = payload.roomID;
-      const userToken = await this.usersService.getUserToken(targetEmail);
-
-      if (userToken) {
-        // 🚀 1. Look up the real name of the person who sent it!
-        const prisma = new PrismaClient();
-        const senderProfile = await prisma.user.findUnique({ where: { email: payload.sender } });
-        const displayTitle = senderProfile?.name || payload.sender; // Fallback to email if no name exists
-
-        // 🚀 2. Send the real name to Firebase
-        await admin.messaging().send({
-          token: userToken,
-          notification: {
-            title: `New message from ${displayTitle}`, // ✨ The real name!
-            body: payload.text,
-          },
-          android: {
-            priority: 'high',
-            notification: { channelId: 'high_importance_channel' },
-          },
-        });
-        console.log(`🔔 Push notification sent to ${targetEmail}!`);
-      }
-    } catch (error) {
-      console.error('🚨 Firebase Notification Error:', error);
-    }
+    
+    // 🚀 Notice: All Firebase/FCM logic has been completely removed from here!
   }
 
   @SubscribeMessage('typing')

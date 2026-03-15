@@ -1,160 +1,155 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; 
-import 'package:http/http.dart' as http; 
-import 'dart:convert'; 
-
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'home_screen.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
-  // 🚀 Updated function to talk to your new Render/Neon Backend
-  Future<void> _saveTokenToDatabase(String fcmToken, String email) async {
-    final String backendEndpoint = 'https://whatsapp-clone-backend-navv.onrender.com/users/save-token';
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  // 🚀 Toggle between Login and Signup modes
+  bool _isLoginMode = true;
+  bool _isLoading = false;
+
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+
+  final storage = const FlutterSecureStorage();
+  
+  // 🚀 Updated to your Local IP!
+  final String backendUrl = 'http://192.168.1.12:3000';
+
+  Future<void> _submitForm() async {
+    setState(() => _isLoading = true);
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final name = _nameController.text.trim();
+
+    final endpoint = _isLoginMode ? '/users/login' : '/users/signup';
+
     try {
       final response = await http.post(
-        Uri.parse(backendEndpoint),
+        Uri.parse('$backendUrl$endpoint'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
-          "email": email, // 👈 We now send the unique email, not the name!
-          "fcmToken": fcmToken,
+          "email": email,
+          "password": password,
+          if (!_isLoginMode) "name": name, 
         }),
       );
 
+      final responseData = jsonDecode(response.body);
+
       if (response.statusCode == 200 || response.statusCode == 201) {
-        print("✅ SUCCESS: Saved token to Neon Database for $email!");
+        if (_isLoginMode) {
+          await storage.write(key: 'jwt_token', value: responseData['access_token']);
+          await storage.write(key: 'user_email', value: responseData['user']['email']);
+          await storage.write(key: 'user_name', value: responseData['user']['name'] ?? 'Unknown');
+
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Signup successful! Please log in."), backgroundColor: Colors.green),
+            );
+            setState(() => _isLoginMode = true);
+          }
+        }
       } else {
-        print("🚨 SERVER ERROR: Could not save token. Status: ${response.statusCode}");
+        _showError(responseData['message'] ?? 'Authentication failed');
       }
     } catch (e) {
-      print("🚨 NETWORK ERROR: Failed to send token: $e");
+      _showError("Network error: Check your connection.");
+      print("🚨 Auth Error: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _signInWithGoogle(BuildContext context) async {
-    try {
-      final GoogleSignIn googleSignIn = GoogleSignIn();
-      
-      // Forces Google to clear its memory so the popup always shows
-      await googleSignIn.signOut(); 
-      
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      
-      if (googleUser == null) return; 
-
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-      final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
+  void _showError(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
-
-      // Log the user into Firebase
-      await FirebaseAuth.instance.signInWithCredential(credential);
-      
-      // 🚀 --- NOTIFICATION TOKEN LOGIC --- 🚀
-      // 1. Get the user's unique Google email
-      final String userEmail = googleUser.email; 
-      
-      // 2. Ask Firebase for this device's unique Notification Token
-      String? token = await FirebaseMessaging.instance.getToken();
-      print('📱 FCM DEVICE TOKEN: $token');
-
-      // 3. Send the email and token up to your NestJS Backend!
-      if (token != null) {
-        await _saveTokenToDatabase(token, userEmail); 
-      }
-      // 🚀 -------------------------------------- 🚀
-
-      if (context.mounted) {
-        _showUsernameDialog(context, userEmail);
-      }
-    } catch (e) {
-      print("🚨 LOGIN ERROR: $e");
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Login Error: $e")),
-        );
-      }
     }
   }
-
-  void _showUsernameDialog(BuildContext context, String userEmail) {
-    final TextEditingController _usernameController = TextEditingController();
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text("Enter your name"),
-          content: TextField(
-            controller: _usernameController,
-            decoration: const InputDecoration(hintText: "Your Name"),
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () async {
-                final String chosenName = _usernameController.text.trim();
-                
-                if (chosenName.isNotEmpty) {
-                  print("🚀 ATTEMPTING TO SAVE NAME: $chosenName for $userEmail");
-                  
-                  try {
-                    // 🚨 IMPORTANT: Make sure this URL is your ACTUAL Render URL!
-                    final response = await http.post(
-                      Uri.parse('https://whatsapp-clone-backend-navv.onrender.com/users/update-name'), 
-                      headers: {'Content-Type': 'application/json'},
-                      body: jsonEncode({
-                        "email": userEmail, 
-                        "username": chosenName
-                      }),
-                    );
-
-                    print("🔥 BACKEND RESPONSE CODE: ${response.statusCode}");
-                    print("🔥 BACKEND RESPONSE BODY: ${response.body}");
-
-                  } catch (e) {
-                    print("🚨 CRITICAL ERROR SAVING NAME: $e");
-                  }
-
-                  if (context.mounted) {
-                    Navigator.pop(context); 
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const HomeScreen()),
-                    );
-                  }
-                }
-              },
-              child: const Text("Save & Continue"),
-            )
-          ],
-        );
-      },
-    );
-  }
-
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.chat, size: 100, color: Color(0xFF128C7E)),
-            const SizedBox(height: 30),
-            const Text("WhatsApp Clone", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 40),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.login),
-              label: const Text("Sign in with Google"),
-              onPressed: () => _signInWithGoogle(context),
-            ),
-          ],
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.chat, size: 80, color: Color(0xFF128C7E)),
+              const SizedBox(height: 20),
+              Text(
+                _isLoginMode ? "Welcome Back" : "Create Account",
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF128C7E)),
+              ),
+              const SizedBox(height: 40),
+              
+              if (!_isLoginMode) ...[
+                TextField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(labelText: "Full Name", border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 20),
+              ],
+              
+              TextField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: "Email", border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 20),
+              
+              TextField(
+                controller: _passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: "Password", border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 30),
+              
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF128C7E)),
+                  onPressed: _isLoading ? null : _submitForm,
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(_isLoginMode ? "Login" : "Sign Up", style: const TextStyle(fontSize: 18, color: Colors.white)),
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              TextButton(
+                onPressed: () {
+                  setState(() => _isLoginMode = !_isLoginMode);
+                },
+                child: Text(
+                  _isLoginMode ? "Don't have an account? Sign up" : "Already have an account? Log in",
+                  style: const TextStyle(color: Color(0xFF128C7E)),
+                ),
+              )
+            ],
+          ),
         ),
       ),
     );

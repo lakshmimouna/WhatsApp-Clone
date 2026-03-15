@@ -1,10 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class UsersService {
-  // This connects to your new Neon PostgreSQL Database
   private prisma = new PrismaClient();
+  
+  // 🚀 Inject JWT Service to create tokens
+  constructor(private jwtService: JwtService) {}
 
   // 1. Fetch all users for the Contact List
   async getAllUsers() {
@@ -15,7 +19,7 @@ export class UsersService {
           name: true,
           email: true,
           avatarUrl: true,
-          fcmToken: true,
+          // Removed fcmToken
         },
       });
     } catch (error) {
@@ -24,61 +28,55 @@ export class UsersService {
     }
   }
 
-  // 2. Save the FCM Token when a user logs in
-  async saveToken(email: string, token: string) {
-    try {
-      // 🚀 Changed from 'update' to 'upsert'
-      const updatedUser = await this.prisma.user.upsert({
-        where: { email: email },
-        update: { fcmToken: token }, // If they exist, just update the token
-        create: {                    // If they DO NOT exist, create them!
-          email: email,
-          fcmToken: token,
-        },
-      });
-      console.log(`✅ Prisma: Token saved/updated for user ${updatedUser.email}`);
-      return updatedUser;
-    } catch (error) {
-      console.error(`🚨 Prisma Save Error:`, error);
-      throw error;
-    }
-  }
-
-  // 3. Get a user's token (We will use this later to send notifications!)
-  async getUserToken(userId: string): Promise<string | null> {
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { fcmToken: true },
-      });
-      return user?.fcmToken || null;
-    } catch (error) {
-      console.error(`🚨 Prisma Retrieval Error:`, error);
-      return null;
-    }
-  }
-
-  // Add this inside your UsersService class:
   async updateName(email: string, newName: string) {
-    // 🚀 PRISMA SYNTAX: This will actually save the name to Neon!
     const updatedUser = await this.prisma.user.update({
       where: { email: email },
-      data: { name: newName }, // Note: Change 'name' to 'username' if that is what your Prisma schema uses!
+      data: { name: newName },
     });
-
     return { success: true, user: updatedUser };
   }
 
-  // 🚀 Erase the token on logout so they stop getting notifications
-  async clearToken(email: string) {
+  // 🚀 2. Signup Logic: Encrypts the password before saving to the database
+  async signup(email: string, pass: string, name?: string) {
+    // Hash the password with a salt round of 10
+    const hashedPassword = await bcrypt.hash(pass, 10);
+    
     try {
-      return await this.prisma.user.update({
-        where: { email: email },
-        data: { fcmToken: null }, // Wipe it out!
+      const newUser = await this.prisma.user.create({
+        data: {
+          email: email,
+          password: hashedPassword,
+          name: name || '',
+        },
       });
+      return { success: true, message: 'User created successfully' };
     } catch (error) {
-      console.error('Error clearing token:', error);
-      return null;
+      throw new Error('User already exists or database error');
     }
+  }
+
+  // 🚀 3. Login Logic: Verifies password and issues a JSON Web Token
+  async login(email: string, pass: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Compare the plain text password with the hashed password in the DB
+    const isPasswordValid = await bcrypt.compare(pass, user.password);
+    
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Create the digital ID card (JWT)
+    const payload = { email: user.email, sub: user.id };
+    const token = this.jwtService.sign(payload);
+
+    return {
+      access_token: token,
+      user: { email: user.email, name: user.name, id: user.id }
+    };
   }
 }

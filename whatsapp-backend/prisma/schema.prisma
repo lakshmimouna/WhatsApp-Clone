@@ -9,11 +9,10 @@ datasource db {
 
 model User {
   id               String            @id @default(uuid())
-  email            String            @unique // <-- This is the unique key!
+  email            String            @unique
+  password         String            // 🚀 ADDED: Custom password for local authentication
   name             String?
   avatarUrl        String?
-  googleId         String?           @unique
-  fcmToken         String?
   messages         Message[]
   chatParticipants ChatParticipant[]
   createdAt        DateTime          @default(now())
@@ -29,12 +28,12 @@ model Chat {
 }
 
 model ChatParticipant {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  chatId    String
-  chat      Chat     @relation(fields: [chatId], references: [id])
-  joinedAt  DateTime @default(now())
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  chatId   String
+  chat     Chat     @relation(fields: [chatId], references: [id])
+  joinedAt DateTime @default(now())
 
   @@unique([userId, chatId])
 }
@@ -46,6 +45,6 @@ model Message {
   sender    User     @relation(fields: [senderId], references: [id])
   chatId    String
   chat      Chat     @relation(fields: [chatId], references: [id])
-  isRead    Boolean  @default(false) // 🚀 ADD THIS EXACT LINE
+  isRead    Boolean  @default(false) 
   createdAt DateTime @default(now())
 }
