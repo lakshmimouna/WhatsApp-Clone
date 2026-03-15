@@ -1,3 +1,9 @@
+/* * ARCHITECTURE: CHAT UI & EMITTER
+ * This screen manages the local UI state for an active conversation.
+ * It takes the user's input, formats it into a JSON payload (attaching timestamp, 
+ * sender, receiver, and reply data), and pushes it to the SocketService.
+ * It also triggers the 'markAsRead' socket event when opened to handle blue ticks.
+ */
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart'; // 🚀 Added Provider

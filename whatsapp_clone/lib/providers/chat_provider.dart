@@ -1,3 +1,10 @@
+/* * ARCHITECTURE: STATE MANAGEMENT (Provider)
+ * This class handles all the heavy data lifting for the chat list.
+ * It fetches the initial user list and chat history via REST API (HTTP GET).
+ * When a real-time message arrives via Socket.io, this provider updates 
+ * the specific chat in local memory and calls notifyListeners() to efficiently 
+ * rebuild ONLY the UI components wrapped in a Consumer, preventing full-screen flickers.
+ */
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';

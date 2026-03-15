@@ -1,3 +1,9 @@
+/* * ARCHITECTURE: SOCKET SERVICE (Singleton Pattern)
+ * This file maintains a single, persistent WebSocket connection to the NestJS backend.
+ * By using a Singleton, we ensure the app doesn't open multiple connections 
+ * if the user navigates between different screens. It listens for 'receiveMessage' 
+ * globally to trigger background local notifications.
+ */
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class SocketService {

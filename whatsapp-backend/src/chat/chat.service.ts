@@ -1,3 +1,10 @@
+/*
+ * ARCHITECTURE: DATABASE SERVICE (Prisma/Neon)
+ * This service handles all CRUD operations for the chat feature.
+ * It uses Prisma ORM to securely connect to the PostgreSQL database on Neon.
+ * It resolves queries for chat history and creates new message records 
+ * ensuring data persistence if the app is closed or refreshed.
+ */
 import { Injectable } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 

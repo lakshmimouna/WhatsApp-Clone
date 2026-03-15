@@ -1,3 +1,10 @@
+/*
+ * ARCHITECTURE: RELATIONAL SCHEMA
+ * Defines the PostgreSQL structure. 
+ * 'User' table manages authentication credentials (hashed via bcrypt).
+ * 'Message' table stores the text, timestamps, and foreign keys 
+ * linking the message to the specific Sender and Receiver.
+ */
 generator client {
   provider = "prisma-client-js"
 }

@@ -1,3 +1,10 @@
+/*
+ * ARCHITECTURE: WEBSOCKET GATEWAY
+ * This file acts as the real-time server. It listens for incoming 'sendMessage' 
+ * events from the Flutter client. Once received, it does two things simultaneously:
+ * 1. Emits the message to the receiver's specific Socket room for real-time delivery.
+ * 2. Passes the payload to the ChatService to be permanently saved in the database.
+ */
 import { WebSocketGateway, SubscribeMessage, MessageBody, WebSocketServer, OnGatewayDisconnect, ConnectedSocket } from '@nestjs/websockets';
 import { OnModuleInit } from '@nestjs/common'; 
 import { Server, Socket } from 'socket.io';
