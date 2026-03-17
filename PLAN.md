@@ -1,23 +1,28 @@
-# Project Journey: Plan vs. Execution
+# Project Journey: Original Plan vs. Final Execution
 
-When I started this project, the goal was to build a standard messaging app. However, during development, I realized that to truly demonstrate full-stack engineering, I needed to take ownership of the entire data pipeline. 
+When I started this project, the goal was to build a standard messaging app using common third-party tools. However, during development, I realized that to truly demonstrate full-stack engineering, I needed to take complete ownership of the architecture.
 
-Here is how the project evolved from a standard template to a custom architecture:
+Here is how my initial 6-phase plan evolved into a custom-engineered solution:
 
-### 1. Authentication
-* **Initial Plan:** Use Google Sign-In and Firebase Authentication for quick setup.
-* **What I Did:** Built a custom Auth Module in NestJS.
-* **Why:** To maintain full ownership of user data and implement custom JWT security and `bcrypt` password hashing.
+## Phase 1 & 2: Project Setup & Backend Development
+* **Initial Plan:** Use Firebase for Google Authentication and Firebase Cloud Messaging (FCM) for push notifications. Keep the database choice open between MongoDB and PostgreSQL.
+* **Actual Execution:** * **Dropped Firebase entirely.**
+  * **Database:** Strictly chose **PostgreSQL with Prisma ORM** (hosted on Neon) because chat applications require strong relational data structures (Users -> Chat Rooms -> Messages).
+  * **Authentication:** Built a custom Auth Module in NestJS using `bcrypt` for password hashing and **JWT** (JSON Web Tokens) for session management.
 
-### 2. Real-Time Data & Notifications
-* **Initial Plan:** Rely on Firebase Cloud Messaging (FCM) to push notifications and update the UI.
-* **What I Did:** Implemented a custom WebSocket Gateway (`Socket.io`) on the backend and used `flutter_local_notifications` on the frontend.
-* **Why:** To eliminate the dependency on Google's push services. WebSockets provide a faster, direct, two-way connection for real-time messaging, allowing the app to trigger native notifications locally via the open socket.
+## Phase 3 & 4: Frontend Setup & Core UI
+* **Initial Plan:** Build the Login/Signup screens integrated with the Google Sign-In plugin. Initialize Riverpod or Bloc for state management.
+* **Actual Execution:**
+  * Built custom Email/Password UI forms that interface directly with my NestJS REST APIs.
+  * Implemented **Provider** for state management to efficiently handle UI updates for the Chat and Group list tabs.
 
-### 3. Database Strategy
-* **Initial Plan:** Store messages in Firebase Firestore (NoSQL).
-* **What I Did:** Migrated to a strict Relational Database (PostgreSQL on Neon) using Prisma ORM.
-* **Why:** A chat application relies heavily on data relationships (Users -> Chat Rooms -> Messages). SQL ensures data integrity, prevents duplicate records, and makes querying complex chat histories much more efficient than NoSQL document stores.
+## Phase 5: Integration & Real-Time Sync
+* **Initial Plan:** Connect Flutter to NestJS WebSockets and listen for background FCM messages for notifications.
+* **Actual Execution:** * Relied entirely on the custom **Socket.io** WebSocket connection for real-time, bidirectional messaging.
+  * Instead of using Google's FCM, I engineered the Flutter app to listen to the live socket events and trigger native Android banners locally using the `flutter_local_notifications` package.
 
-### Conclusion
-By abandoning the "easy route" of third-party BaaS, I built a highly scalable, independent architecture where I control the complete flow of data from the device screen to the database rows.
+## Phase 6: Final Testing & Conclusion
+* **Initial Plan:** Test Google Login and push notifications via Firebase.
+* **Actual Execution:** Tested the custom JWT auth flow, relational database queries, and socket-driven local notifications.
+
+**Conclusion:** By abandoning the initial plan's reliance on third-party Backend-as-a-Service (BaaS) platforms, I successfully built a highly scalable, independent architecture. I now control the complete data flow from the Flutter frontend to the PostgreSQL backend.
