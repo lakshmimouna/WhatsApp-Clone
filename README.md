@@ -18,4 +18,4 @@ A fully functional, real-time messaging application built from the ground up wit
 * **Local Notifications:** Background socket listeners trigger native Android UI notifications instantly when a message is received.
 
 ---
-📖 **[Read the full Architecture Journey: Plan vs. Execution here](PLAN.md)**
+📖 **[Read the full Architecture Journey: Plan vs. Execution here](Plan.md)**
