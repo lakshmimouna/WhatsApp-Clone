@@ -382,12 +382,6 @@ The live backend URL is then used directly in the Flutter app.
 
 ---
 
-## 🤝 Contributing
-
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
-
----
-
 ## 📄 License
 
 This project is for educational purposes only. WhatsApp is a trademark of Meta Platforms, Inc.
